@@ -191,5 +191,11 @@ FAR_THRESHOLD_KM = 500    # flag stores beyond this as "very far"
 # ── OSRM ────────────────────────────────────────────────────
 OSRM_URL = os.getenv("OSRM_URL", "http://localhost:5000")
 
+# ── Capacity Fill Percentages ─────────────────────────────────────
+# Maximum fill percentages for vehicle capacities (0.0 to 1.0)
+# These can be overridden from the frontend UI
+MAX_WEIGHT_FILL_PERCENTAGE = float(os.getenv("MAX_WEIGHT_FILL_PERCENTAGE", "1.0"))  # 100% by default
+MAX_VOLUME_FILL_PERCENTAGE = float(os.getenv("MAX_VOLUME_FILL_PERCENTAGE", "1.0"))  # 100% by default
+
 # ── Integer scaling (OR-Tools needs integers) ────────────────
 M3_SCALE = 1000   # m³ × 1000 → integer litres for capacity constraints

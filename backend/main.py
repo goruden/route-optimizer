@@ -329,10 +329,18 @@ async def optimize(
     rural_solver_time : Optional[int]          = Form(None),
     group_id          : Optional[str]          = Form(None),
     version_name      : Optional[str]          = Form(None),
+    max_weight_fill   : float                  = Form(1.0),
+    max_volume_fill   : float                  = Form(1.0),
     db                : Session                = Depends(get_db),
 ):
     if mode not in ("fastest","shortest","cheapest","balanced","geographic"):
         raise HTTPException(400, f"Invalid mode '{mode}'")
+    
+    # Validate fill percentages (0.0 to 1.0)
+    if not (0.0 <= max_weight_fill <= 1.0):
+        raise HTTPException(400, "max_weight_fill must be between 0.0 and 1.0")
+    if not (0.0 <= max_volume_fill <= 1.0):
+        raise HTTPException(400, "max_volume_fill must be between 0.0 and 1.0")
 
     # ── Resolve data ─────────────────────────────────────────
     if dataset_id:
@@ -380,6 +388,10 @@ async def optimize(
     # ── Solve ─────────────────────────────────────────────────
     config.MAX_TRIPS_PER_VEHICLE   = max_trips
     config.MAX_SOLVER_TIME_SECONDS = solver_time
+    
+    # Set capacity fill percentages
+    config.MAX_WEIGHT_FILL_PERCENTAGE = max_weight_fill
+    config.MAX_VOLUME_FILL_PERCENTAGE = max_volume_fill
     
     # Set rural solver time if provided, otherwise use default
     if rural_solver_time is not None:
