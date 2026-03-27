@@ -20,7 +20,7 @@ module.exports = {
       user: "ubuntu",
       host: "54.191.84.231",
       ref: "origin/main",
-      repo: "https://github.com/goruden/route-optimizer.git",
+      repo: "git@github.com:goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
 
       "pre-setup":
