@@ -36,7 +36,7 @@ export function Shell(){
 
   const handleLogout = () => {
     d({ t: "AUTH_LOGOUT" });
-    window.location.href = "/login";
+    window.location.href = "/route-optimizer/login";
   };
 
   return(
