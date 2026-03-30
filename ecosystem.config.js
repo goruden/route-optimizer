@@ -10,7 +10,7 @@ module.exports = {
       watch: false,
       env: {
         NODE_ENV: "production",
-        PORT: 3000
+        PORT: 3067
       }
     }
   ],
@@ -20,7 +20,8 @@ module.exports = {
       user: "ubuntu",
       host: "54.191.84.231",
       ref: "origin/main",
-      repo: "git@github.com:goruden/route-optimizer.git",
+      key: '~/.ssh/qcomm-dev',
+      repo: "git@route-optimizer.github.com:goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
 
       "pre-setup":
