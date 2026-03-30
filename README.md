@@ -26,13 +26,13 @@ docker-compose up -d
 This will start:
 - **MongoDB** (port 27017) - Data storage
 - **OSRM** (port 5000) - Road routing engine for Mongolia
-- **Backend API** (port 8000) - FastAPI + OR-Tools optimization
-- **Frontend** (port 3001) - Next.js web interface
+- **Backend API** (port 8067) - FastAPI + OR-Tools optimization
+- **Frontend** (port 3067) - Next.js web interface
 
 ### 3. Access the Application
-- **Web UI**: http://localhost:3001
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/api/health
+- **Web UI**: http://localhost:3067
+- **API Docs**: http://localhost:8067/docs
+- **Health Check**: http://localhost:8067/api/health
 
 ---
 
@@ -79,7 +79,7 @@ mongod
 4. **Start Backend API**
 ```bash
 cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8067 --reload
 ```
 
 ### Frontend Setup
@@ -95,7 +95,7 @@ npm install
 npm run dev
 ```
 
-Access at http://localhost:3000
+Access at http://localhost:3067
 
 ---
 
@@ -213,7 +213,7 @@ MAX_VOLUME_FILL_PERCENTAGE=1.0
 Create `.env.local` in frontend root:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8067
 ```
 
 ---

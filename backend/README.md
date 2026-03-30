@@ -38,11 +38,11 @@ python distanceMatrix.py
 
 ### 4. Start the API
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8067 --reload
 ```
 
 ### 5. Open the UI
-Visit http://localhost:8000
+Visit http://localhost:8067
 
 ---
 

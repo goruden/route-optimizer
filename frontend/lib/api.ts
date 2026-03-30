@@ -1,6 +1,6 @@
 import type { Dataset, Store, Vehicle, Job, JobResult } from "@/types/vrp"
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8067";
 
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + url, opts);
