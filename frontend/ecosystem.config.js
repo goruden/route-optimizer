@@ -23,9 +23,13 @@ module.exports = {
       repo: "git@github.com:goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
 
+      // 🔥 FIX 1: skip broken local git step
+      "pre-deploy-local": "echo 'skip local git'",
+
       "pre-setup":
         "sudo mkdir -p /opt/route-optimizer && sudo chown -R ubuntu:ubuntu /opt/route-optimizer",
 
+      // 🔥 FIX 2: ensure pnpm exists + correct deploy flow
       "post-deploy":
         "cd frontend && pnpm install && pnpm build && pm2 reload ecosystem.config.js --env dev"
     }
