@@ -3,8 +3,8 @@ module.exports = {
     {
       name: "route-optimizer-frontend",
       cwd: "/opt/route-optimizer/source/frontend",
-      script: "node",
-      args: ".next/standalone/server.js",
+      script: "pnpm",
+      args: "start",
       instances: 1,
       autorestart: true,
       watch: false,
