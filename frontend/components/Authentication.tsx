@@ -41,7 +41,7 @@ export default function Authentication() {
 
   useEffect(() => {
     if (s.auth.isAuthenticated) {
-      window.location.href = "/route-optimizer"
+      window.location.href = process.env.NEXT_PUBLIC_BASE_PATH ?? "/route-optimizer"
     }
   }, [s.auth.isAuthenticated])
 

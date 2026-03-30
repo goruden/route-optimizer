@@ -36,7 +36,7 @@ export function Shell(){
 
   const handleLogout = () => {
     d({ t: "AUTH_LOGOUT" });
-    window.location.href = "/route-optimizer/login";
+    window.location.href = (process.env.NEXT_PUBLIC_BASE_PATH ?? "/route-optimizer") + "/login"
   };
 
   return(

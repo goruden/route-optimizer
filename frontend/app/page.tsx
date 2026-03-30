@@ -9,7 +9,7 @@ export default function Home() {
   useEffect(() => {
     // Redirect to login if not authenticated
     if (!s.auth.loading && !s.auth.isAuthenticated) {
-      window.location.href = "/route-optimizer/login"
+      window.location.href = (process.env.NEXT_PUBLIC_BASE_PATH ?? "/route-optimizer") + "/login"
     }
   }, [s.auth.isAuthenticated, s.auth.loading])
 
