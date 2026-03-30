@@ -23,13 +23,8 @@ module.exports = {
       key: '~/.ssh/qcomm-dev',
       repo: "git@route-optimizer.github.com:goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
-
-      "pre-setup":
-        "sudo mkdir -p /opt/route-optimizer && sudo chown -R ubuntu:ubuntu /opt/route-optimizer",
-
-      // 🔥 FIX 2: ensure pnpm exists + correct deploy flow
-      "post-deploy":
-        "cd frontend && pnpm install && pnpm build && pm2 reload ecosystem.config.js --env dev"
+      "pre-setup": "",
+      "post-deploy": "cd /opt/route-optimizer/source/frontend && pnpm install && pnpm build && pm2 reload ../../ecosystem.config.js --only route-optimizer-frontend"
     }
   }
 };
