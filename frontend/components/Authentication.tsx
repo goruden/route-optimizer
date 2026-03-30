@@ -41,7 +41,7 @@ export default function Authentication() {
 
   useEffect(() => {
     if (s.auth.isAuthenticated) {
-      window.location.href = "/"
+      window.location.href = "/route-optimizer"
     }
   }, [s.auth.isAuthenticated])
 
