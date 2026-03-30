@@ -21,7 +21,7 @@ module.exports = {
       host: "54.191.84.231",
       ref: "origin/main",
       key: '~/.ssh/qcomm-dev',
-      repo: "git@route-optimizer.github.com:goruden/route-optimizer.git",
+      repo: "https://github.com/goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
       "pre-setup": "",
       "post-deploy": "cd /opt/route-optimizer/source/frontend && pnpm install && pnpm build && pm2 reload ../../ecosystem.config.js --only route-optimizer-frontend"
