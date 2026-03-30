@@ -21,7 +21,7 @@ module.exports = {
       host: "54.191.84.231",
       ref: "origin/main",
       key: '~/.ssh/id_ed25519',
-      repo: "git@route-optimizer.github.com:goruden/route-optimizer.git",
+      repo: "https://github.com/goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
 
       "pre-setup":
