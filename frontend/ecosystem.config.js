@@ -20,11 +20,8 @@ module.exports = {
       user: "ubuntu",
       host: "54.191.84.231",
       ref: "origin/main",
-      repo: "git@github.com:goruden/route-optimizer.git",
+      repo: "git@route-optimizer.github.com:goruden/route-optimizer.git",
       path: "/opt/route-optimizer",
-
-      // 🔥 FIX 1: skip broken local git step
-      "pre-deploy-local": "echo 'skip local git'",
 
       "pre-setup":
         "sudo mkdir -p /opt/route-optimizer && sudo chown -R ubuntu:ubuntu /opt/route-optimizer",
