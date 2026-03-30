@@ -14,16 +14,16 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
 
 export const getHealth    = () => req<{status:string;osrm:string;version:string}>("/api/health");
 export const getDatasets  = () => req<Dataset[]>("/api/datasets");
-export const deleteDataset= (id:number) => req<{ok:boolean}>(`/api/datasets/${id}`,{method:"DELETE"});
-export const getStores    = (id:number) => req<Store[]>(`/api/datasets/${id}/stores`);
-export const getVehicles  = (id:number) => req<Vehicle[]>(`/api/datasets/${id}/vehicles`);
+export const deleteDataset= (id:string) => req<{ok:boolean}>(`/api/datasets/${id}`,{method:"DELETE"});
+export const getStores    = (id:string) => req<Store[]>(`/api/datasets/${id}/stores`);
+export const getVehicles  = (id:string) => req<Vehicle[]>(`/api/datasets/${id}/vehicles`);
 export const getJobs      = (limit=40) => req<Job[]>(`/api/jobs?limit=${limit}`);
 export const getJobResult = (id:string) => req<JobResult & Job>(`/api/jobs/${id}`);
 export const deleteJob    = (id:string) => req<{ok:boolean}>(`/api/jobs/${id}`,{method:"DELETE"});
 export const exportUrl    = (id:string) => `${BASE}/api/export/${id}`;
 
 /** Download stores + vehicles (+ matrix if available) as Excel */
-export const exportDatasetUrl = (id:number) => `${BASE}/api/datasets/${id}/export`;
+export const exportDatasetUrl = (id:string) => `${BASE}/api/datasets/${id}/export`;
 
 export const createDataset = (name:string, storeFile:File, matrixFile?:File) => {
   const fd = new FormData();
@@ -31,17 +31,17 @@ export const createDataset = (name:string, storeFile:File, matrixFile?:File) => 
   if (matrixFile) fd.append("matrix_file", matrixFile);
   return req<Dataset>("/api/datasets", {method:"POST", body:fd});
 };
-export const uploadMatrix = (id:number, f:File) => {
+export const uploadMatrix = (id:string, f:File) => {
   const fd = new FormData(); fd.append("matrix_file", f);
   return req<{ok:boolean}>(`/api/datasets/${id}/matrix`, {method:"POST", body:fd});
 };
-export const updateStore = (dsId:number, sid:number, body:Partial<Store>) =>
+export const updateStore = (dsId:string, sid:number, body:Partial<Store>) =>
   req<Store>(`/api/datasets/${dsId}/stores/${sid}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-export const deleteStore = (dsId:number, sid:number) =>
+export const deleteStore = (dsId:string, sid:number) =>
   req<{ok:boolean}>(`/api/datasets/${dsId}/stores/${sid}`, {method:"DELETE"});
-export const updateVehicle = (dsId:number, vid:number, body:Partial<Vehicle>) =>
+export const updateVehicle = (dsId:string, vid:number, body:Partial<Vehicle>) =>
   req<Vehicle>(`/api/datasets/${dsId}/vehicles/${vid}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-export const deleteVehicle = (dsId:number, vid:number) =>
+export const deleteVehicle = (dsId:string, vid:number) =>
   req<{ok:boolean}>(`/api/datasets/${dsId}/vehicles/${vid}`, {method:"DELETE"});
 
 export const optimize = (p:{
@@ -84,7 +84,7 @@ export const buildMatrix = async (options: {
  * Rebuild the OSRM-based distance matrix for a dataset and save it in-place.
  * Does NOT download the file.
  */
-export const rebuildDatasetMatrix = async (datasetId: number): Promise<void> => {
+export const rebuildDatasetMatrix = async (datasetId: string): Promise<void> => {
   const fd = new FormData();
   fd.append("dataset_id", String(datasetId));
   fd.append("save_to_dataset", "true");
@@ -97,9 +97,9 @@ export const rebuildDatasetMatrix = async (datasetId: number): Promise<void> => 
   await r.blob(); // consume response body
 };
 
-export const addStore = (dsId:number, body:Record<string,unknown>) =>
+export const addStore = (dsId:string, body:Record<string,unknown>) =>
   req<Store>(`/api/datasets/${dsId}/stores`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-export const addVehicle = (dsId:number, body:Record<string,unknown>) =>
+export const addVehicle = (dsId:string, body:Record<string,unknown>) =>
   req<Vehicle>(`/api/datasets/${dsId}/vehicles`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
 
 export const fmtSec = (s:number) => `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor((s%3600)/60)).padStart(2,"0")}`;
@@ -107,7 +107,7 @@ export const fmtSec = (s:number) => `${String(Math.floor(s/3600)).padStart(2,"0"
 // ── Run Groups ───────────────────────────────────────────────
 import type { RunGroup } from "@/types/vrp"
 export const getRunGroups      = () => req<RunGroup[]>("/api/run-groups");
-export const createRunGroup    = (name:string, datasetId?:number) =>
+export const createRunGroup    = (name:string, datasetId?:string) =>
   req<RunGroup>("/api/run-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,dataset_id:datasetId??null})});
 export const renameRunGroup    = (id:string,name:string) =>
   req<RunGroup>(`/api/run-groups/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
@@ -130,7 +130,7 @@ export const createManualJob = (data: {
     route_name?: string;
   }>;
   is_manual: boolean;
-  dataset_id?: number;
+  dataset_id?: string;
 }) => req<Job>("/api/jobs/manual", {
   method: "POST",
   headers: { "Content-Type": "application/json" },

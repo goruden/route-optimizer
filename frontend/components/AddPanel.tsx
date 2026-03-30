@@ -500,7 +500,7 @@ function RouteCard({
 
   return (
     <div
-      className="rounded-2xl border overflow-hidden shadow-sm flex flex-col min-h-55"
+      className="rounded-2xl border shadow-sm flex flex-col"
       style={{ borderColor: fleetColor + "40" }}
     >
       {/* Header */}
@@ -588,12 +588,12 @@ function RouteCard({
         )}
 
         <div
-          className="flex gap-2 overflow-x-auto overflow-y-hidden scrollbar-thin"
+          className="flex gap-2 flex-wrap"
           style={{ minHeight: route.stops.length > 0 ? 96 : 0 }}
           onDragOver={(e) => e.preventDefault()}
         >
           {route.stops.map((stop, idx) => (
-            <div className="flex h-full justify-center gap-2" key={stop.uid}>
+            <div className="flex justify-center gap-2 h-25" key={stop.uid}>
               <StopChip
                 stop={stop}
                 order={idx + 1}
@@ -612,15 +612,7 @@ function RouteCard({
                 onDrop={() => handleDrop(idx)}
               />
               {idx < route.stops.length - 1 && (
-                <div
-                  className="self-center text-[14px] select-none transition-colors"
-                  style={{
-                    color:
-                      (dragIndex === idx || dragIndex === idx + 1) && overIndex != null
-                        ? fleetColor
-                        : "#CBD5E1",
-                  }}
-                >
+                <div className="self-center text-[18px] select-none transition-colors text-black font-bold">
                   →
                 </div>
               )}
@@ -782,7 +774,7 @@ export function RouteBuilderModal({
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState(initialTitle);
   const [routes, setRoutes] = useState<RouteEntry[]>([]);
-  const [dsId, setDsId] = useState<number | null>(null);
+  const [dsId, setDsId] = useState<string | null>(null);
   const [groupId, setGroupId] = useState("none");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -816,7 +808,7 @@ export function RouteBuilderModal({
       setTitle(initialTitle);
       setRoutes(JSON.parse(JSON.stringify(initialRoutes)));
       const resolvedDs = initDsId ?? s.activeDatasetId;
-      setDsId(resolvedDs);
+      setDsId(resolvedDs?.toString() ?? null);
       setGroupId(initGroupId ?? "none");
       setImportWarnings([]);
     }
@@ -1096,7 +1088,10 @@ export function RouteBuilderModal({
               </label>
               <select
                 value={dsId ?? ""}
-                onChange={(e) => setDsId(Number(e.target.value) || null)}
+                onChange={(e) => {
+                  const value = e.target.value || null;
+                  setDsId(value);
+                }}
                 className="w-full text-[11px] border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 bg-white"
               >
                 <option value="">Select dataset…</option>

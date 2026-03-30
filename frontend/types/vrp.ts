@@ -1,9 +1,9 @@
 export interface Dataset {
-  id: number; name: string; created_at: string;
+  id: string; name: string; created_at: string;
   store_count: number; vehicle_count: number; has_matrix: boolean;
 }
 export interface Store {
-  id: number; dataset_id: number;
+  id: number; dataset_id: string;
   store_id: string; node_id: string;
   eng_name: string; mn_name: string;
   address: string; detail_addr: string;
@@ -14,14 +14,14 @@ export interface Store {
   has_dry: boolean; has_cold: boolean;
 }
 export interface Vehicle {
-  id: number; dataset_id: number;
+  id: number; dataset_id: string;
   truck_id: string; description: string;
   depot: string; fleet: string;
   cap_kg: number; cap_m3: number;
   fuel_cost_km: number; vehicle_cost: number; labor_cost: number;
 }
 export interface Job {
-  id: string; dataset_id: number | null;
+  id: string; dataset_id: string | null;
   group_id?: string | null; version_name?: string | null; is_manual?: boolean;
   mode: string; max_trips: number; solver_time: number;
   status: "pending"|"running"|"done"|"error";
@@ -31,7 +31,7 @@ export interface Job {
   total_routes?: number; total_cost?: number; total_man_hours?: number;
 }
 export interface RunGroup {
-  id: string; name: string; dataset_id: number|null; created_at: string;
+  id: string; name: string; dataset_id: string|null; created_at: string;
   jobs: Job[];
 }
 export interface OptSummary {

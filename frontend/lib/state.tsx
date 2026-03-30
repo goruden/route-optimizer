@@ -3,7 +3,7 @@ import React,{createContext,useContext,useReducer,ReactNode,useEffect} from "rea
 import type{Dataset,Store,Vehicle,Job,RunGroup,OptSummary,RouteSummary,StopDetail,UnservedStore,MapRoute,JobResult} from "@/types/vrp"
 
 export interface AppState {
-  datasets:Dataset[]; activeDatasetId:number|null;
+  datasets:Dataset[]; activeDatasetId:string|null;
   stores:Store[]; vehicles:Vehicle[];
   jobs:Job[]; activeJobId:string|null;
   runGroups:RunGroup[]; activeGroupId:string|null;
@@ -46,7 +46,7 @@ const INIT:AppState={
 };
 
 export type Act=
-  |{t:"SET_DATASETS";v:Dataset[]}|{t:"SET_DS";v:number|null}
+  |{t:"SET_DATASETS";v:Dataset[]}  |{t:"SET_DS";v:string|null}
   |{t:"SET_STORES";v:Store[]}|{t:"SET_VEHICLES";v:Vehicle[]}
   |{t:"SET_JOBS";v:Job[]}
   |{t:"SET_GROUPS";v:RunGroup[]}
