@@ -16,7 +16,7 @@ function synthStore(sid: string, stops: StopDetail[]): Store | null {
   const ds = stops.filter(d => d.store_id === sid && d.fleet === "DRY");
   const cs = stops.filter(d => d.store_id === sid && d.fleet === "COLD");
   return {
-    id: 0, dataset_id: 0,
+    id: 0, dataset_id: "",
     store_id: m.store_id, node_id: m.store_id,
     eng_name: m.eng_name, mn_name: m.mn_name,
     address: m.address, detail_addr: m.detail_addr ?? "",
