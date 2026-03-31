@@ -1,6 +1,8 @@
 import type { Dataset, Store, Vehicle, Job, JobResult } from "@/types/vrp"
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8067";
+// WebSocket base — replace http(s) scheme with ws(s)
+export const WS_BASE = BASE.replace(/^https/, "wss").replace(/^http/, "ws");
 
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + url, opts);
@@ -44,8 +46,14 @@ export const updateVehicle = (dsId:string, vid:number, body:Partial<Vehicle>) =>
 export const deleteVehicle = (dsId:string, vid:number) =>
   req<{ok:boolean}>(`/api/datasets/${dsId}/vehicles/${vid}`, {method:"DELETE"});
 
+/**
+ * Start an optimization run.
+ * Returns {job_id, status:"running"} IMMEDIATELY — solver runs in background.
+ * Connect to  WS_BASE + /ws/logs/{job_id}  for live log stream.
+ * Poll  GET /api/jobs/{job_id}  until status === "done" | "error".
+ */
 export const optimize = (p:{
-  dataset_id?:number; store_file?:File; matrix_file?:File;
+  dataset_id?:string; store_file?:File; matrix_file?:File;
   mode:string; max_trips:number; solver_time:number;
   max_weight_fill?:number; max_volume_fill?:number;
   group_id?:string; version_name?:string;
@@ -61,8 +69,26 @@ export const optimize = (p:{
   if (p.matrix_file)  fd.append("matrix_file",  p.matrix_file);
   if (p.group_id)     fd.append("group_id",     p.group_id);
   if (p.version_name) fd.append("version_name", p.version_name);
-  return req<JobResult>("/api/optimize", {method:"POST", body:fd});
+  return req<{job_id:string; status:string}>("/api/optimize", {method:"POST", body:fd});
 };
+
+/**
+ * Poll a job until it reaches a terminal state.
+ * Resolves with the full JobResult once done, rejects on error.
+ */
+export async function waitForJob(
+  jobId: string,
+  { intervalMs = 1500, timeoutMs = 900_000 } = {},
+): Promise<JobResult & Job> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, intervalMs));
+    const job = await getJobResult(jobId);
+    if (job.status === "done")  return job;
+    if (job.status === "error") throw new Error(job.error_msg ?? "Solver failed");
+  }
+  throw new Error("Optimization timed out");
+}
 
 export const buildMatrix = async (options: {
   datasetId?: number;
@@ -80,10 +106,6 @@ export const buildMatrix = async (options: {
   return r.blob();
 };
 
-/**
- * Rebuild the OSRM-based distance matrix for a dataset and save it in-place.
- * Does NOT download the file.
- */
 export const rebuildDatasetMatrix = async (datasetId: string): Promise<void> => {
   const fd = new FormData();
   fd.append("dataset_id", String(datasetId));
@@ -94,7 +116,7 @@ export const rebuildDatasetMatrix = async (datasetId: string): Promise<void> => 
     try { const e = await r.json(); msg = e.detail ?? msg; } catch {}
     throw new Error(msg);
   }
-  await r.blob(); // consume response body
+  await r.blob();
 };
 
 export const addStore = (dsId:string, body:Record<string,unknown>) =>

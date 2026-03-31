@@ -5,8 +5,8 @@ import type{Dataset,Store,Vehicle,Job,RunGroup,OptSummary,RouteSummary,StopDetai
 export interface AppState {
   datasets:Dataset[]; activeDatasetId:string|null;
   stores:Store[]; vehicles:Vehicle[];
-  jobs:Job[]; activeJobId:string|null;
-  runGroups:RunGroup[]; activeGroupId:string|null;
+  jobs:Job[]; activeJobId:string|null; activeGroupId:string|null;
+  runGroups:RunGroup[]; 
   summary:OptSummary|null;
   routeSummary:RouteSummary[]; stopDetails:StopDetail[];
   unserved:UnservedStore[]; mapData:MapRoute[];
@@ -51,6 +51,7 @@ export type Act=
   |{t:"SET_JOBS";v:Job[]}
   |{t:"SET_GROUPS";v:RunGroup[]}
   |{t:"SET_ACTIVE_GROUP";v:string|null}
+  |{t:"SET_ACTIVE_JOB";v:string|null}
   |{t:"SET_RESULT";jobId:string;r:JobResult}
   |{t:"SET_ROUTES";v:RouteSummary[]}
   |{t:"CLEAR"}
@@ -90,6 +91,7 @@ function reduce(s:AppState,a:Act):AppState{
     case"SET_JOBS":         return{...s,jobs:a.v};
     case"SET_GROUPS":       return{...s,runGroups:a.v};
     case"SET_ACTIVE_GROUP": return{...s,activeGroupId:a.v};
+    case"SET_ACTIVE_JOB": return{...s,activeJobId:a.v};
     case"SET_ROUTES":       return{...s,routeSummary:a.v};
     case"SET_EDIT":         return{...s,editMode:a.v};
     case"SET_RUNNING":  return{...s,running:a.v};

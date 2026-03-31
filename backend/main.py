@@ -6,9 +6,7 @@ import datetime, json, logging, os, uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 import numpy as np
-
 from motor.motor_asyncio import AsyncIOMotorDatabase
-
 
 class _NumpySafeEncoder(json.JSONEncoder):
     """Converts numpy scalars to Python native types before JSON serialisation."""
@@ -23,8 +21,9 @@ class _NumpySafeEncoder(json.JSONEncoder):
 def _dumps(obj) -> str:
     return json.dumps(obj, cls=_NumpySafeEncoder)
 
-
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, FileResponse
 from pydantic import BaseModel
@@ -44,6 +43,30 @@ from database import (
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s  %(levelname)-8s  %(message)s")
 log = logging.getLogger(__name__)
+
+_job_log_queues: dict[str, asyncio.Queue] = {}
+_solve_executor  = ThreadPoolExecutor(max_workers=2, thread_name_prefix="vrp-solver")
+
+
+class _JobLogHandler(logging.Handler):
+    """
+    Captures Python log records emitted during a solve run and routes
+    them to a per-job asyncio.Queue so the browser WebSocket receives
+    them in real time.
+    """
+    def __init__(self, job_id: str, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__()
+        self.job_id = job_id
+        self.loop   = loop
+        self.setFormatter(logging.Formatter("%(levelname)-8s %(name)s — %(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        q = _job_log_queues.get(self.job_id)
+        if q is not None and self.loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(q.put(self.format(record)), self.loop)
+            except Exception:
+                pass
 
 
 # ── App startup / shutdown via lifespan ──────────────────────
@@ -483,7 +506,7 @@ async def clear_vehicles(dataset_id: str,
 
 @app.post("/api/optimize")
 async def optimize(
-    dataset_id        : Optional[str]          = Form(None),   # ← str now
+    dataset_id        : Optional[str]          = Form(None),
     store_file        : Optional[UploadFile]   = File(None),
     matrix_file       : Optional[UploadFile]   = File(None),
     mode              : str                    = Form("cheapest"),
@@ -496,6 +519,14 @@ async def optimize(
     max_volume_fill   : float                  = Form(1.0),
     db                : AsyncIOMotorDatabase   = Depends(get_db),
 ):
+    """
+    Start an optimization run.
+
+    Returns {job_id, status:"running"} immediately.
+    The solve runs as a background asyncio task.
+    Stream real-time logs via  WS /ws/logs/{job_id}
+    Poll for completion via    GET /api/jobs/{job_id}
+    """
     if mode not in ("fastest", "shortest", "cheapest", "balanced", "geographic"):
         raise HTTPException(400, f"Invalid mode '{mode}'")
     if not (0.0 <= max_weight_fill <= 1.0):
@@ -503,7 +534,7 @@ async def optimize(
     if not (0.0 <= max_volume_fill <= 1.0):
         raise HTTPException(400, "max_volume_fill must be between 0.0 and 1.0")
 
-    # ── Resolve data ─────────────────────────────────────────
+    # ── Resolve data (fast — only I/O) ──────────────────────
     if dataset_id:
         ds = await db[DatasetDoc.COLLECTION].find_one({"_id": dataset_id})
         if not ds:
@@ -524,14 +555,7 @@ async def optimize(
     else:
         raise HTTPException(422, "Provide dataset_id OR both store_file+matrix_file")
 
-    try:
-        dist_df, dur_df = data_loader.load_matrix(matrix_bytes)
-    except Exception as e:
-        raise HTTPException(422, f"Matrix error: {e}")
-
-    warnings = data_loader.validate_data(stores_list, vehicles_list, dist_df, dur_df)
-
-    # ── Create Job record ─────────────────────────────────────
+    # ── Create job record ────────────────────────────────────
     job_id = str(uuid.uuid4())
     if not version_name and group_id:
         count = await db[JobDoc.COLLECTION].count_documents({"group_id": group_id})
@@ -539,87 +563,26 @@ async def optimize(
     elif not version_name:
         version_name = "Auto v1"
 
-    job_doc = JobDoc.make(job_id, dataset_id=dataset_id, group_id=group_id,
-                          version_name=version_name, mode=mode,
-                          max_trips=max_trips, solver_time=solver_time,
-                          rural_solver_time=rural_solver_time)
+    job_doc = JobDoc.make(
+        job_id, dataset_id=dataset_id, group_id=group_id,
+        version_name=version_name, mode=mode,
+        max_trips=max_trips, solver_time=solver_time,
+        rural_solver_time=rural_solver_time,
+    )
     job_doc["status"] = "running"
     await db[JobDoc.COLLECTION].insert_one(job_doc)
 
-    # ── Solve ─────────────────────────────────────────────────
-    config.MAX_TRIPS_PER_VEHICLE   = max_trips
-    config.MAX_SOLVER_TIME_SECONDS = solver_time
-    config.MAX_WEIGHT_FILL_PERCENTAGE = max_weight_fill
-    config.MAX_VOLUME_FILL_PERCENTAGE = max_volume_fill
-    if rural_solver_time is not None:
-        config.RURAL_SOLVER_TIME_SECONDS = rural_solver_time
+    # ── Fire-and-forget background task ─────────────────────
+    asyncio.create_task(_solve_background(
+        job_id, stores_list, vehicles_list, matrix_bytes,
+        mode, max_trips, solver_time, max_weight_fill, max_volume_fill,
+        rural_solver_time, db,
+    ))
 
-    try:
-        result = vrp_solver.solve(stores_list, vehicles_list, dist_df, dur_df, mode=mode)
-    except Exception as e:
-        await db[JobDoc.COLLECTION].update_one(
-            {"_id": job_id},
-            {"$set": {"status": "error", "error_msg": str(e)}}
-        )
-        raise HTTPException(500, f"Solver error: {e}")
+    log.info(f"Job {job_id[:8]} queued — mode={mode}, stores={len(stores_list)}, solver={solver_time}s")
 
-    # ── OSRM geometries ───────────────────────────────────────
-    route_geometries = {}
-    try:
-        wps_map = {}
-        for fleet, fr in result.items():
-            for route in fr["routes"]:
-                dc  = config.DEPOTS["Dry DC"] if fleet == "DRY" else config.DEPOTS["Cold DC"]
-                wps = [(dc["lat"], dc["lon"])]
-                for stop in route["stops"]:
-                    wps.append((stop["lat"], stop["lon"]))
-                wps.append((dc["lat"], dc["lon"]))
-                wps_map[route["virtual_id"]] = wps
-        route_geometries = osrm_client.get_route_geometries_batch(wps_map)
-    except Exception as e:
-        log.warning(f"OSRM geometry skipped: {e}")
-
-    # ── Outputs ───────────────────────────────────────────────
-    route_summary = output_formatter.build_route_summary(result)
-    stop_details  = output_formatter.build_stop_details(result)
-    unserved      = output_formatter.build_unserved(result, dist_df)
-    map_data      = output_formatter.build_map_data(result, route_geometries)
-
-    served      = sum(len(r["stops"]) for fr in result.values() for r in fr["routes"])
-    unserved_n  = sum(len(fr["unserved"]) for fr in result.values())
-    total_cost  = sum(r["cost_total"]  for r in route_summary)
-    total_dist  = sum(r["distance_km"] for r in route_summary)
-    total_mh    = sum(r.get("man_hours", 0) for r in route_summary)
-
-    summary = {
-        "mode": mode, "total_stores": len(stores_list),
-        "total_served": served, "total_unserved": unserved_n,
-        "total_routes": len(route_summary),
-        "total_dist_km": round(total_dist, 1),
-        "total_cost": round(total_cost, 0),
-        "total_man_hours": round(total_mh, 1),
-        "warnings": warnings,
-    }
-
-    excel_bytes = output_formatter.export_to_excel(route_summary, stop_details, unserved)
-
-    # Insert result doc (excel stored in GridFS)
-    result_doc = JobResultDoc.make(job_id, summary, route_summary,
-                                   stop_details, unserved, map_data)
-    await db[JobResultDoc.COLLECTION].insert_one(result_doc)
-    await save_excel_bytes(job_id, excel_bytes)
-
-    await db[JobDoc.COLLECTION].update_one(
-        {"_id": job_id},
-        {"$set": {"status": "done",
-                  "completed_at": datetime.datetime.utcnow()}}
-    )
-
-    log.info(f"Job {job_id[:8]} done — {served} served, {unserved_n} unserved, mode={mode}")
-    return {"job_id": job_id, "summary": summary,
-            "route_summary": route_summary, "stop_details": stop_details,
-            "unserved": unserved, "map_data": map_data}
-
+    # Return immediately — frontend polls GET /api/jobs/{job_id} for completion
+    return {"job_id": job_id, "status": "running"}
 
 # ════════════════════════════════════════════════════════════
 #  Manual Job Creation
@@ -942,6 +905,156 @@ async def create_manual_job(body: ManualJobCreate,
              f"{len(unserved)} unserved, {len(route_summary)} routes")
     return JobDoc.to_dict(job_doc)
 
+async def _solve_background(
+    job_id          : str,
+    stores_list     : list,
+    vehicles_list   : list,
+    matrix_bytes    : bytes,
+    mode            : str,
+    max_trips       : int,
+    solver_time     : int,
+    max_weight_fill : float,
+    max_volume_fill : float,
+    rural_solver_time,
+    db: AsyncIOMotorDatabase,
+):
+    """
+    Full optimization pipeline executed as a background asyncio task.
+
+    - Solver runs in a thread-pool executor (it's CPU-bound / blocking).
+    - All Python log records are intercepted and pushed to the per-job
+      asyncio.Queue so the WebSocket endpoint can stream them.
+    - When finished (success or error) the job document is updated and
+      "__DONE__" is placed on the queue to signal the WS to close.
+    """
+    loop = asyncio.get_event_loop()
+
+    # Create queue BEFORE adding log handler so WS waiter finds it
+    q = asyncio.Queue()
+    _job_log_queues[job_id] = q
+
+    handler  = _JobLogHandler(job_id, loop)
+    root_log = logging.getLogger()
+    root_log.addHandler(handler)
+
+    async def _emit(msg: str):
+        await q.put(msg)
+
+    try:
+        await _emit(f"INFO     main — ⚡ Job {job_id[:8]} starting …")
+
+        # ── Apply solver config ──────────────────────────────────
+        config.MAX_TRIPS_PER_VEHICLE      = max_trips
+        config.MAX_SOLVER_TIME_SECONDS    = solver_time
+        config.MAX_WEIGHT_FILL_PERCENTAGE = max_weight_fill
+        config.MAX_VOLUME_FILL_PERCENTAGE = max_volume_fill
+        if rural_solver_time is not None:
+            config.RURAL_SOLVER_TIME_SECONDS = rural_solver_time
+
+        # ── Load + validate matrices (fast) ──────────────────────
+        await _emit("INFO     main — Loading distance matrix …")
+        dist_df, dur_df = await loop.run_in_executor(
+            None, lambda: data_loader.load_matrix(matrix_bytes)
+        )
+        warnings = data_loader.validate_data(stores_list, vehicles_list, dist_df, dur_df)
+        if warnings:
+            for w in warnings:
+                await _emit(f"WARNING  main — {w}")
+
+        dry_stores  = sum(1 for s in stores_list if s.get("has_dry"))
+        cold_stores = sum(1 for s in stores_list if s.get("has_cold"))
+        dry_v       = sum(1 for v in vehicles_list if v.get("fleet") == "DRY")
+        cold_v      = sum(1 for v in vehicles_list if v.get("fleet") == "COLD")
+        await _emit(
+            f"INFO     main — DRY: {dry_stores} stores / {dry_v} trucks | "
+            f"COLD: {cold_stores} stores / {cold_v} trucks"
+        )
+
+        # ── Heavy solve in thread pool (releases event loop) ─────
+        await _emit("INFO     main — Starting OR-Tools solver …")
+        result = await loop.run_in_executor(
+            _solve_executor,
+            lambda: vrp_solver.solve(stores_list, vehicles_list, dist_df, dur_df, mode=mode),
+        )
+
+        # ── OSRM geometries ──────────────────────────────────────
+        await _emit("INFO     osrm — Fetching route polylines …")
+        route_geometries: dict = {}
+        try:
+            wps_map: dict = {}
+            for fleet, fr in result.items():
+                for route in fr["routes"]:
+                    dc  = config.DEPOTS["Dry DC"] if fleet == "DRY" else config.DEPOTS["Cold DC"]
+                    wps = [(dc["lat"], dc["lon"])]
+                    for stop in route["stops"]:
+                        wps.append((stop["lat"], stop["lon"]))
+                    wps.append((dc["lat"], dc["lon"]))
+                    wps_map[route["virtual_id"]] = wps
+
+            route_geometries = await loop.run_in_executor(
+                None, lambda: osrm_client.get_route_geometries_batch(wps_map)
+            )
+            await _emit(f"INFO     osrm — {len(route_geometries)} route geometries fetched")
+        except Exception as e:
+            await _emit(f"WARNING  osrm — Geometry skipped: {e}")
+
+        # ── Format outputs ───────────────────────────────────────
+        route_summary = output_formatter.build_route_summary(result)
+        stop_details  = output_formatter.build_stop_details(result)
+        unserved      = output_formatter.build_unserved(result, dist_df)
+        map_data      = output_formatter.build_map_data(result, route_geometries)
+
+        served     = sum(len(r["stops"]) for fr in result.values() for r in fr["routes"])
+        unserved_n = sum(len(fr["unserved"]) for fr in result.values())
+        total_cost = sum(r["cost_total"]  for r in route_summary)
+        total_dist = sum(r["distance_km"] for r in route_summary)
+        total_mh   = sum(r.get("man_hours", 0) for r in route_summary)
+
+        summary = {
+            "mode": mode, "total_stores": len(stores_list),
+            "total_served": served, "total_unserved": unserved_n,
+            "total_routes": len(route_summary),
+            "total_dist_km": round(total_dist, 1),
+            "total_cost": round(total_cost, 0),
+            "total_man_hours": round(total_mh, 1),
+            "warnings": warnings,
+        }
+
+        await _emit(
+            f"INFO     main — ✅ Done: {served} served · {unserved_n} unserved · "
+            f"{len(route_summary)} routes · ₮{round(total_cost):,}"
+        )
+
+        # ── Persist results ──────────────────────────────────────
+        await _emit("INFO     main — Saving results …")
+        excel_bytes = await loop.run_in_executor(
+            None,
+            lambda: output_formatter.export_to_excel(route_summary, stop_details, unserved),
+        )
+        result_doc = JobResultDoc.make(job_id, summary, route_summary, stop_details, unserved, map_data)
+        await db[JobResultDoc.COLLECTION].insert_one(result_doc)
+        await save_excel_bytes(job_id, excel_bytes)
+
+        await db[JobDoc.COLLECTION].update_one(
+            {"_id": job_id},
+            {"$set": {"status": "done", "completed_at": datetime.datetime.utcnow()}},
+        )
+        log.info(f"Job {job_id[:8]} completed — {served} served, mode={mode}")
+
+    except Exception as exc:
+        log.exception(f"Job {job_id[:8]} failed: {exc}")
+        await _emit(f"ERROR    main — Solver crashed: {exc}")
+        try:
+            await db[JobDoc.COLLECTION].update_one(
+                {"_id": job_id},
+                {"$set": {"status": "error", "error_msg": str(exc)}},
+            )
+        except Exception:
+            pass
+
+    finally:
+        root_log.removeHandler(handler)
+        await q.put("__DONE__")
 
 # ════════════════════════════════════════════════════════════
 #  Jobs
@@ -1277,6 +1390,46 @@ def serve_frontend():
         return FileResponse("index.html")
     return JSONResponse({"message": "VRP API v3 — see /docs"})
 
+@app.websocket("/ws/logs/{job_id}")
+async def ws_job_logs(ws: WebSocket, job_id: str):
+    """
+    Stream solver log lines to the browser in real time.
+
+    Protocol:
+      __PING__  → keep-alive, browser ignores
+      __DONE__  → solve finished, browser closes connection
+      anything else → a log line to display
+    """
+    await ws.accept()
+
+    # Wait up to 8 s for the solver background task to register its queue
+    for _ in range(80):
+        if job_id in _job_log_queues:
+            break
+        await asyncio.sleep(0.1)
+
+    q = _job_log_queues.get(job_id)
+    if q is None:
+        await ws.send_text("__DONE__")
+        await ws.close()
+        return
+
+    try:
+        while True:
+            try:
+                msg = await asyncio.wait_for(q.get(), timeout=60.0)
+                await ws.send_text(msg)
+                if msg == "__DONE__":
+                    break
+            except asyncio.TimeoutError:
+                try:
+                    await ws.send_text("__PING__")
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _job_log_queues.pop(job_id, None)
 
 if __name__ == "__main__":
     import uvicorn
