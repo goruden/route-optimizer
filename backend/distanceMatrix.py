@@ -56,7 +56,7 @@ def build_matrix(store_file=None, matrix_file=None):
 
     # --- Call OSRM table API ---
     coords_str = ";".join([f"{n['lon']},{n['lat']}" for n in nodes])
-    url = f"{OSRM_URL}/table/v1/driving/{coords_str}?annotations=distance,duration"
+    url = f"{OSRM_URL}/table/v1/driving/{coords_str}?annotations=distance"
 
     print(f"  Calling OSRM for {n_total}×{n_total} matrix...")
     try:
@@ -74,30 +74,30 @@ def build_matrix(store_file=None, matrix_file=None):
         print(f"  OSRM error: {data.get('message', 'Unknown error')}")
         return None
 
-    duration_matrix = np.array(data["durations"])   # seconds
+    # duration_matrix = np.array(data["durations"])   # seconds
     distance_matrix = np.array(data["distances"])   # meters
 
     # Convert duration to minutes
-    duration_min = np.round(duration_matrix / 60, 2)
+    # duration_min = np.round(duration_matrix / 60, 2)
 
-    print(f"  Matrix shape: {duration_min.shape}")
+    # print(f"  Matrix shape: {duration_min.shape}")
     print(f"  Saving to {matrix_file}...")
 
     import os
     os.makedirs(os.path.dirname(matrix_file) if os.path.dirname(matrix_file) else ".", exist_ok=True)
 
     with pd.ExcelWriter(matrix_file, engine="openpyxl") as writer:
-        pd.DataFrame(duration_min,    index=all_ids, columns=all_ids).to_excel(
-            writer, sheet_name=config.DURATION_SHEET)
+        # pd.DataFrame(duration_min,    index=all_ids, columns=all_ids).to_excel(
+        #     writer, sheet_name=config.DURATION_SHEET)
         pd.DataFrame(distance_matrix, index=all_ids, columns=all_ids).to_excel(
             writer, sheet_name=config.DISTANCE_SHEET)
 
-    print(f"  Done! Saved sheets: '{config.DURATION_SHEET}' and '{config.DISTANCE_SHEET}'")
+    print(f"  Done! Saved sheets: '{config.DISTANCE_SHEET}'")
     print(f"\n  DC rows in matrix:")
-    for dc_name in config.DEPOTS.keys():
-        idx = all_ids.index(dc_name)
-        avg_dur = duration_min[idx, len(config.DEPOTS):].mean()
-        print(f"    {dc_name} (row/col {idx}) — avg duration to stores: {avg_dur:.1f} min")
+    # for dc_name in config.DEPOTS.keys():
+    #     idx = all_ids.index(dc_name)
+        # avg_dur = duration_min[idx, len(config.DEPOTS):].mean()
+        # print(f"    {dc_name} (row/col {idx}) — avg duration to stores: {avg_dur:.1f} min")
 
     return matrix_file
 

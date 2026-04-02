@@ -123,6 +123,27 @@ def _angular_diff(a1: float, a2: float) -> float:
 #  Time-dependent speed
 # ════════════════════════════════════════════════════════════
 
+def _estimate_speed(n1, n2):
+    # Base speed
+    speed = 35.0  # default urban baseline
+
+    # Distance-based heuristic
+    d = _haversine_m(n1["lat"], n1["lon"], n2["lat"], n2["lon"])
+
+    if d < 1000:       # <1 km → dense city
+        speed = 20
+    elif d < 5000:     # 1–5 km → mixed
+        speed = 30
+    elif d < 20000:    # 5–20 km → outer city
+        speed = 45
+    else:              # highway
+        speed = 70
+
+    # OPTIONAL: penalize center area (if you know city center)
+    # if near_city_center(n1): speed *= 0.8
+
+    return speed
+
 def _speed_factor(hour: int) -> float:
     return config.HOUR_SPEED_FACTOR.get(int(hour) % 24, 1.0)
 
@@ -195,9 +216,10 @@ def _build_submatrix(
         for j in range(n):
             ki, kj = keys[i], keys[j]
             if ki and kj and ki in dist_s.index and kj in dist_s.columns:
-                d   = float(dist_s.at[ki, kj])
-                t   = float(dur_s_df.at[ki, kj]) * 60.0   # dur_df in minutes → seconds
+                d = float(dist_s.at[ki, kj])  # meters
 
+                speed_kmh = _estimate_speed(nodes[i], nodes[j])
+                t = d / (speed_kmh * 1000 / 3600)
                 # Guard: OSRM sometimes emits 0-second arcs for very
                 # close nodes.  Fall back to haversine @ 40 km/h so
                 # the solver never sees a zero-duration arc between
@@ -214,6 +236,10 @@ def _build_submatrix(
                     )
                     d = max(d, hav)
                     t = d / (40_000.0 / 3600.0)
+                
+                # Add minimum time for very short hops
+                if d < 50:  # very short hops
+                    t += 20  # minimum 20 sec movement
 
                 dist[i][j] = d
                 dur[i][j]  = t
@@ -413,7 +439,9 @@ def _make_time_cb(manager, dur_s: np.ndarray, svc_times: np.ndarray):
     def cb(fi, ti):
         ni = manager.IndexToNode(fi)
         nj = manager.IndexToNode(ti)
-        return int(dur_s[ni][nj] + svc_times[ni])
+        turn_penalty = 8 if ni != 0 else 0  # 8 sec per stop transition
+
+        return int(dur_s[ni][nj] + svc_times[ni] + turn_penalty)
     return cb
 
 
