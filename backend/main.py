@@ -915,52 +915,55 @@ async def _solve_background(
     solver_time     : int,
     max_weight_fill : float,
     max_volume_fill : float,
-    rural_solver_time,
-    db: AsyncIOMotorDatabase,
+    rural_solver_time,        # kept in signature for API compat, ignored
+    db,
 ):
-    """
-    Full optimization pipeline executed as a background asyncio task.
-
-    - Solver runs in a thread-pool executor (it's CPU-bound / blocking).
-    - All Python log records are intercepted and pushed to the per-job
-      asyncio.Queue so the WebSocket endpoint can stream them.
-    - When finished (success or error) the job document is updated and
-      "__DONE__" is placed on the queue to signal the WS to close.
-    """
+    from solver import SolverConfig   # local import keeps top-level clean
+ 
     loop = asyncio.get_event_loop()
-
-    # Create queue BEFORE adding log handler so WS waiter finds it
-    q = asyncio.Queue()
+    q    = asyncio.Queue()
     _job_log_queues[job_id] = q
-
+ 
     handler  = _JobLogHandler(job_id, loop)
     root_log = logging.getLogger()
     root_log.addHandler(handler)
-
+ 
     async def _emit(msg: str):
         await q.put(msg)
-
+ 
     try:
         await _emit(f"INFO     main — ⚡ Job {job_id[:8]} starting …")
-
-        # ── Apply solver config ──────────────────────────────────
-        config.MAX_TRIPS_PER_VEHICLE      = max_trips
-        config.MAX_SOLVER_TIME_SECONDS    = solver_time
-        config.MAX_WEIGHT_FILL_PERCENTAGE = max_weight_fill
-        config.MAX_VOLUME_FILL_PERCENTAGE = max_volume_fill
-        if rural_solver_time is not None:
-            config.RURAL_SOLVER_TIME_SECONDS = rural_solver_time
-
-        # ── Load + validate matrices (fast) ──────────────────────
+ 
+        # ── Build SolverConfig (no global mutation) ──────────────
+        cfg = SolverConfig(
+            mode                  = mode,
+            max_trips             = max_trips,
+            solver_time_s         = solver_time,
+            max_weight_fill       = max_weight_fill,
+            max_volume_fill       = max_volume_fill,
+            reload_time_s         = config.RELOAD_TIME_SECONDS,
+            service_time_base_s   = config.SERVICE_TIME_SECONDS,
+            service_time_per_kg_s = 0.0,
+            penalty_unserved      = config.PENALTY_UNSERVED,
+            vehicle_fixed_cost    = config.VEHICLE_FIXED_COST,
+            m3_scale              = config.M3_SCALE,
+            far_threshold_km      = config.FAR_THRESHOLD_KM,
+        )
+ 
+        await _emit(f"INFO     main — mode={cfg.mode}, trips={cfg.max_trips}, "
+                    f"budget={cfg.solver_time_s}s")
+ 
+        # ── Load matrices ────────────────────────────────────────
         await _emit("INFO     main — Loading distance matrix …")
         dist_df, dur_df = await loop.run_in_executor(
             None, lambda: data_loader.load_matrix(matrix_bytes)
         )
-        warnings = data_loader.validate_data(stores_list, vehicles_list, dist_df, dur_df)
-        if warnings:
-            for w in warnings:
-                await _emit(f"WARNING  main — {w}")
-
+        warnings = data_loader.validate_data(
+            stores_list, vehicles_list, dist_df, dur_df
+        )
+        for w in warnings:
+            await _emit(f"WARNING  main — {w}")
+ 
         dry_stores  = sum(1 for s in stores_list if s.get("has_dry"))
         cold_stores = sum(1 for s in stores_list if s.get("has_cold"))
         dry_v       = sum(1 for v in vehicles_list if v.get("fleet") == "DRY")
@@ -969,14 +972,16 @@ async def _solve_background(
             f"INFO     main — DRY: {dry_stores} stores / {dry_v} trucks | "
             f"COLD: {cold_stores} stores / {cold_v} trucks"
         )
-
-        # ── Heavy solve in thread pool (releases event loop) ─────
+ 
+        # ── Solve ────────────────────────────────────────────────
         await _emit("INFO     main — Starting OR-Tools solver …")
         result = await loop.run_in_executor(
             _solve_executor,
-            lambda: vrp_solver.solve(stores_list, vehicles_list, dist_df, dur_df, mode=mode),
+            lambda: vrp_solver.solve(
+                stores_list, vehicles_list, dist_df, dur_df, cfg=cfg
+            ),
         )
-
+ 
         # ── OSRM geometries ──────────────────────────────────────
         await _emit("INFO     osrm — Fetching route polylines …")
         route_geometries: dict = {}
@@ -984,63 +989,74 @@ async def _solve_background(
             wps_map: dict = {}
             for fleet, fr in result.items():
                 for route in fr["routes"]:
-                    dc  = config.DEPOTS["Dry DC"] if fleet == "DRY" else config.DEPOTS["Cold DC"]
+                    dc  = (config.DEPOTS["Dry DC"] if fleet == "DRY"
+                           else config.DEPOTS["Cold DC"])
                     wps = [(dc["lat"], dc["lon"])]
                     for stop in route["stops"]:
                         wps.append((stop["lat"], stop["lon"]))
                     wps.append((dc["lat"], dc["lon"]))
                     wps_map[route["virtual_id"]] = wps
-
+ 
             route_geometries = await loop.run_in_executor(
                 None, lambda: osrm_client.get_route_geometries_batch(wps_map)
             )
-            await _emit(f"INFO     osrm — {len(route_geometries)} route geometries fetched")
+            await _emit(
+                f"INFO     osrm — {len(route_geometries)} route geometries fetched"
+            )
         except Exception as e:
             await _emit(f"WARNING  osrm — Geometry skipped: {e}")
-
-        # ── Format outputs ───────────────────────────────────────
+ 
+        # ── Format + persist ─────────────────────────────────────
         route_summary = output_formatter.build_route_summary(result)
         stop_details  = output_formatter.build_stop_details(result)
         unserved      = output_formatter.build_unserved(result, dist_df)
         map_data      = output_formatter.build_map_data(result, route_geometries)
-
+ 
         served     = sum(len(r["stops"]) for fr in result.values() for r in fr["routes"])
         unserved_n = sum(len(fr["unserved"]) for fr in result.values())
         total_cost = sum(r["cost_total"]  for r in route_summary)
         total_dist = sum(r["distance_km"] for r in route_summary)
         total_mh   = sum(r.get("man_hours", 0) for r in route_summary)
-
+ 
         summary = {
-            "mode": mode, "total_stores": len(stores_list),
-            "total_served": served, "total_unserved": unserved_n,
-            "total_routes": len(route_summary),
-            "total_dist_km": round(total_dist, 1),
-            "total_cost": round(total_cost, 0),
+            "mode"           : mode,
+            "total_stores"   : len(stores_list),
+            "total_served"   : served,
+            "total_unserved" : unserved_n,
+            "total_routes"   : len(route_summary),
+            "total_dist_km"  : round(total_dist, 1),
+            "total_cost"     : round(total_cost, 0),
             "total_man_hours": round(total_mh, 1),
-            "warnings": warnings,
+            "warnings"       : warnings,
         }
-
+ 
         await _emit(
             f"INFO     main — ✅ Done: {served} served · {unserved_n} unserved · "
             f"{len(route_summary)} routes · ₮{round(total_cost):,}"
         )
-
-        # ── Persist results ──────────────────────────────────────
+ 
         await _emit("INFO     main — Saving results …")
         excel_bytes = await loop.run_in_executor(
             None,
-            lambda: output_formatter.export_to_excel(route_summary, stop_details, unserved),
+            lambda: output_formatter.export_to_excel(
+                route_summary, stop_details, unserved
+            ),
         )
-        result_doc = JobResultDoc.make(job_id, summary, route_summary, stop_details, unserved, map_data)
+        result_doc = JobResultDoc.make(
+            job_id, summary, route_summary, stop_details, unserved, map_data
+        )
         await db[JobResultDoc.COLLECTION].insert_one(result_doc)
         await save_excel_bytes(job_id, excel_bytes)
-
+ 
         await db[JobDoc.COLLECTION].update_one(
             {"_id": job_id},
-            {"$set": {"status": "done", "completed_at": datetime.datetime.utcnow()}},
+            {"$set": {
+                "status"      : "done",
+                "completed_at": datetime.datetime.utcnow(),
+            }},
         )
         log.info(f"Job {job_id[:8]} completed — {served} served, mode={mode}")
-
+ 
     except Exception as exc:
         log.exception(f"Job {job_id[:8]} failed: {exc}")
         await _emit(f"ERROR    main — Solver crashed: {exc}")
@@ -1051,10 +1067,11 @@ async def _solve_background(
             )
         except Exception:
             pass
-
+ 
     finally:
         root_log.removeHandler(handler)
         await q.put("__DONE__")
+ 
 
 # ════════════════════════════════════════════════════════════
 #  Jobs

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp, buildBadges } from "@/lib/state";
 import { fmtSec } from "@/lib/api";
 import type { Store, StopDetail, MapRoute } from "@/types/vrp";
@@ -43,6 +43,7 @@ export default function MapPanel() {
   const [drawerDels,   setDrawerDels]   = useState<StopDetail[]>([]);
   const [drawerOpen,   setDrawerOpen]   = useState(false);
   const [routeControlCollapsed, setRouteControlCollapsed] = useState(false);
+  const [badgesVisible, setBadgesVisible] = useState(true);
 
   /* stable ref so Leaflet callbacks never go stale */
   const openRef = useRef<(nodeId: string) => void>(() => {});
@@ -73,6 +74,11 @@ export default function MapPanel() {
     }).addTo(map);
     map.setView(UB, 12);
     mapInst.current = map;
+    // map.on("zoomend", () => {
+    //   // force re-render of markers
+    //   storeLyr.current.forEach(m => map.removeLayer(m));
+    //   storeLyr.current.clear();
+    // });
     inited.current  = true;
 
     /* depot markers */
@@ -97,6 +103,7 @@ export default function MapPanel() {
     if (!mapInst.current || !inited.current) return;
     const L = require("leaflet");
     const map = mapInst.current;
+    // const zoom = map.getZoom();
     storeLyr.current.forEach(m => map.removeLayer(m));
     storeLyr.current.clear();
 
@@ -112,19 +119,35 @@ export default function MapPanel() {
     })();
     if (!effectiveStores.length) return;
 
-    const badgeMap = buildBadges(stopDetails, mapData, routeVis, fleetFilter);
+    // const badgeMap = buildBadges(stopDetails, mapData, routeVis, fleetFilter);
 
     effectiveStores.forEach(st => {
-      const badges = badgeMap[st.store_id] ?? [];
-      const hasJob = !!activeJobId;
-      const { html, size, anchor } = storeIcon(st, badges, hasJob);
+      const isActive = mapData.some(route =>
+        routeVis[route.route_id] !== false &&
+        route.stops.some(s => s.store_id === st.store_id)
+      );
+
+      // 🔥 only show badges when zoomed in
+      // const showBadges = zoom >= 15;
+      const showBadges = badgesVisible;
+
+      let icon;
+
+      if (showBadges && isActive) {
+        const badges = buildBadges(stopDetails, mapData, routeVis, fleetFilter)[st.store_id] ?? [];
+        icon = smartBadgeIcon(badges);
+      } else {
+        icon = simpleStoreIcon(st, isActive);
+      }
+
+      const { html, size, anchor } = icon;
       const ic = L.divIcon({ html, className: "", iconSize: size, iconAnchor: anchor, popupAnchor: [0, -anchor[1]] });
       const mk = L.marker([st.lat, st.lon], { icon: ic, zIndexOffset: 100 })
         .addTo(map).on("click", () => openRef.current(st.node_id));
       storeLyr.current.set(st.node_id, mk);
     });
     /* NO fitBounds — map never auto-zooms */
-  }, [stores, stopDetails, mapData, routeVis, fleetFilter, activeJobId]);
+  }, [stores, stopDetails, mapData, routeVis, fleetFilter, activeJobId, badgesVisible]);
 
   /* ── route polylines ───────────────────────────────── */
   useEffect(() => {
@@ -192,7 +215,7 @@ export default function MapPanel() {
         </div>
       )}
 
-      {mapData.length > 0 && <RouteControlPanel collapsed={routeControlCollapsed} setCollapsed={setRouteControlCollapsed} />}
+      {mapData.length > 0 && <RouteControlPanel collapsed={routeControlCollapsed} setCollapsed={setRouteControlCollapsed} badgesVisible={badgesVisible} setBadgesVisible={setBadgesVisible} />}
       <StoreDrawer store={drawerStore} dels={drawerDels} open={drawerOpen} mapData={mapData}
         onClose={() => { setDrawerOpen(false); setRouteControlCollapsed(false); d({ t: "SET_SEL", v: null }); }} />
     </div>
@@ -202,7 +225,12 @@ export default function MapPanel() {
 /* ═══════════════════════════════════════════════════════
    Route control panel (floating, top-right)
    ═══════════════════════════════════════════════════════ */
-function RouteControlPanel({ collapsed, setCollapsed }: { collapsed: boolean; setCollapsed: (value: boolean) => void }) {
+function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVisible }: { 
+  collapsed: boolean; 
+  setCollapsed: (value: boolean) => void;
+  badgesVisible: boolean;
+  setBadgesVisible: (value: boolean) => void;
+}) {
   const { s, d } = useApp();
   const { mapData, routeVis, fleetFilter } = s;
 
@@ -214,16 +242,24 @@ function RouteControlPanel({ collapsed, setCollapsed }: { collapsed: boolean; se
       style={{ width: collapsed ? 46 : 228, maxHeight: "calc(100vh - 100px)", transition: "width 0.22s ease" }}>
 
       {/* header */}
-      <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-200 shrink-0">
-        {!collapsed && <>
-          <span className="flex-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Routes</span>
-          <button onClick={() => d({ t: "TOGGLE_ALL", v: !allOn })}
-            className="text-[10px] font-bold text-blue-500 hover:text-blue-600">
-            {allOn ? "Hide all" : "Show all"}
-          </button>
-        </>}
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 shrink-0">
+        {!collapsed && (
+          <div className="flex items-center gap-3 flex-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Routes</span>
+            <div className="flex gap-1.5">
+              <button onClick={() => d({ t: "TOGGLE_ALL", v: !allOn })}
+                className="px-2 py-1 text-[10px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors">
+                {allOn ? "Hide all" : "Show all"}
+              </button>
+              <button onClick={() => setBadgesVisible(!badgesVisible)}
+                className="px-2 py-1 text-[10px] font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-md transition-colors">
+                {badgesVisible ? "Hide badges" : "Show badges"}
+              </button>
+            </div>
+          </div>
+        )}
         <button onClick={() => setCollapsed(!collapsed)}
-          className="w-7 h-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-[12px] text-slate-500 hover:border-blue-500 shrink-0">
+          className="w-7 h-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-[12px] text-slate-500 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-600 shrink-0 transition-all">
           {collapsed ? "☰" : "◀"}
         </button>
       </div>
@@ -481,25 +517,65 @@ function DPill({ icon, label, val }: { icon: string; label: string; val: string 
 }
 
 /* ── store marker HTML ───────────────────────────────── */
-function storeIcon(st: Store, badges: Array<{ color: string; label: string }>, hasJob: boolean) {
-  if (!hasJob || badges.length === 0) {
-    const c = hasJob ? "#8B5CF6"
-      : st.has_dry && st.has_cold ? "#8B5CF6"
-      : st.has_dry  ? "#5B7CFA"
-      : st.has_cold ? "#0EA5E9"
-      : "#9BA3C0";
-    return {
-      html: `<div style="width:12px;height:12px;border-radius:50%;background:${c};border:2.5px solid #fff;box-shadow:0 2px 6px ${c}88;"></div>`,
-      size: [12, 12] as [number, number], anchor: [6, 12] as [number, number],
-    };
-  }
-  const chips = badges.map(b =>
-    `<div style="background:${b.color};color:#fff;border-radius:5px;padding:0 5px;height:16px;line-height:16px;font-size:9px;font-weight:800;font-family:Inter,sans-serif;min-width:22px;text-align:center;flex-shrink:0;">${b.label}</div>`
-  ).join("");
-  const w = Math.max(badges.length * 26 + 6, 28);
+function simpleStoreIcon(st: Store, isActive: boolean) {
+  // default = small neutral
+  let color = "#94A3B8"; // gray
+
+  // active route store = green
+  if (isActive) color = "#BD4AFF";
+
   return {
-    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;"><div style="display:flex;gap:2px;align-items:center;background:#fff;border:1.5px solid #E2E8F8;border-radius:7px;padding:2px 3px;box-shadow:0 2px 8px rgba(91,124,250,0.18);">${chips}</div><div style="width:6px;height:6px;border-radius:50%;background:#5B7CFA;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.18);"></div></div>`,
-    size:   [w, 26] as [number, number],
-    anchor: [w / 2, 26] as [number, number],
+    html: `<div style="
+      width: 8px;
+      height: 8px;
+      border-radius:50%;
+      background:${color};
+      border:2px solid #fff;
+      box-shadow:0 1px 4px rgba(0,0,0,0.2);
+    "></div>`,
+    size: [8, 8] as [number, number],
+    anchor: [4, 4] as [number, number],
+  };
+}
+
+function smartBadgeIcon(badges: Array<{ color: string; label: string }>) {
+  // 🔥 LIMIT BADGES (IMPORTANT)
+  const limited = badges.slice(0, 2); // max 2 only
+
+  const chips = limited.map(b =>
+    `<div style="
+      background:${b.color};
+      color:#fff;
+      border-radius:4px;
+      padding:0 4px;
+      height:14px;
+      line-height:14px;
+      font-size:8px;
+      font-weight:700;
+    ">${b.label}</div>`
+  ).join("");
+
+  return {
+    html: `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
+        <div style="
+          display:flex;
+          gap:2px;
+          background:#fff;
+          border-radius:6px;
+          padding:2px;
+          box-shadow:0 1px 4px rgba(0,0,0,0.15);
+        ">
+          ${chips}
+        </div>
+        <div style="
+          width:6px;height:6px;border-radius:50%;
+          background:#22C55E;
+          border:2px solid #fff;
+        "></div>
+      </div>
+    `,
+    size: [30, 22] as [number, number],
+    anchor: [15, 22] as [number, number],
   };
 }
