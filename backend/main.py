@@ -8,18 +8,10 @@ from typing import Optional
 import numpy as np
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-class _NumpySafeEncoder(json.JSONEncoder):
-    """Converts numpy scalars to Python native types before JSON serialisation."""
-    def default(self, obj):
-        if isinstance(obj, np.integer):  return int(obj)
-        if isinstance(obj, np.floating): return float(obj)
-        if isinstance(obj, np.bool_):    return bool(obj)
-        if isinstance(obj, np.ndarray):  return obj.tolist()
-        return super().default(obj)
-
-
-def _dumps(obj) -> str:
-    return json.dumps(obj, cls=_NumpySafeEncoder)
+from auth import (
+    LoginRequest, TokenResponse, MeResponse,
+    login_user, refresh_token as _refresh_token, get_current_user,
+)
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -82,6 +74,60 @@ app = FastAPI(title="VRP Route Optimization System", version="3.0.0",
               lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
+
+
+# ── POST /api/auth/login ──────────────────────────────────────
+@app.post("/api/auth/login", response_model=TokenResponse)
+async def auth_login(body: LoginRequest):
+    """
+    Accepts {username, password}.
+    Returns {access_token, token_type, expires_in, username}.
+    Token is valid for 30 minutes.
+    """
+    return login_user(body)
+ 
+
+# ── POST /api/auth/refresh ────────────────────────────────────
+@app.post("/api/auth/refresh", response_model=TokenResponse)
+async def auth_refresh(username: str = Depends(get_current_user)):
+    """
+    Requires a valid Bearer token.
+    Returns a fresh 30-minute token.
+    The frontend calls this automatically when the token has < 5 min left.
+    """
+    return _refresh_token(username)
+ 
+
+# ── POST /api/auth/logout ─────────────────────────────────────
+@app.post("/api/auth/logout")
+async def auth_logout(username: str = Depends(get_current_user)):
+    """
+    Server-side logout (stateless JWT — nothing to invalidate server-side,
+    but the endpoint keeps the API consistent and lets you add a token
+    blocklist later if needed).
+    """
+    log.info(f"User '{username}' logged out")
+    return {"ok": True}
+ 
+
+# ── GET /api/auth/me ──────────────────────────────────────────
+@app.get("/api/auth/me")
+async def auth_me(username: str = Depends(get_current_user)):
+    """Returns the currently authenticated user. Used to restore sessions."""
+    return {"username": username}
+
+class _NumpySafeEncoder(json.JSONEncoder):
+    """Converts numpy scalars to Python native types before JSON serialisation."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):  return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.bool_):    return bool(obj)
+        if isinstance(obj, np.ndarray):  return obj.tolist()
+        return super().default(obj)
+
+
+def _dumps(obj) -> str:
+    return json.dumps(obj, cls=_NumpySafeEncoder)
 
 
 # ════════════════════════════════════════════════════════════
