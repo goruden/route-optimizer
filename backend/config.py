@@ -186,7 +186,7 @@ VEHICLE_FIXED_COST   = 50_000          # small cost per trip to discourage empty
 BALANCED_SPAN_COEFF  = 300
 
 # ── Distance & Routing ──────────────────────────────────────
-FAR_THRESHOLD_KM = 500    # flag stores beyond this as "very far"
+FAR_THRESHOLD_KM = 1000    # flag stores beyond this as "very far"
 
 # ── OSRM ────────────────────────────────────────────────────
 OSRM_URL = os.getenv("OSRM_URL", "http://localhost:5000")

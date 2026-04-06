@@ -239,7 +239,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
 
   return (
     <div className="absolute top-3 right-3 z-1000 bg-white/96 backdrop-blur border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden"
-      style={{ width: collapsed ? 46 : 228, maxHeight: "calc(100vh - 100px)", transition: "width 0.22s ease" }}>
+      style={{ width: collapsed ? 46 : 228, maxHeight: "calc(100vh - 140px)", transition: "width 0.22s ease" }}>
 
       {/* header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 shrink-0">
