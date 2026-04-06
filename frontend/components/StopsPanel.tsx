@@ -20,8 +20,8 @@ export function StopsPanel() {
   if (!stopDetails.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
       <span className="text-5xl">📍</span>
-      <p className="font-semibold text-slate-900">No stops yet</p>
-      <p className="text-[12px]">Run optimization to see stop details</p>
+      <p className="font-semibold text-slate-900">Зогсоол байхгүй байна</p>
+      <p className="text-[12px]">Шинээр тооцолол хийнэ үү</p>
     </div>
   );
 
@@ -39,7 +39,7 @@ export function StopsPanel() {
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-slate-500 font-mono ml-auto">{filtered.length} / {stopDetails.length} stops</span>
+        <span className="text-[11px] text-slate-500 font-mono ml-auto">{filtered.length} / {stopDetails.length} зогсоол</span>
       </div>
 
       <div className="flex-1 overflow-auto">

@@ -7,9 +7,9 @@ import { HistoryPanel } from "./HistoryPanel";
 export function Sidebar(){
   const{s,d}=useApp();
   const tabs=[
-    {key:"run" as const,   icon:"🚀",label:"Run"},
-    {key:"data" as const,  icon:"📂",label:"Data"},
-    {key:"history" as const,icon:"🕑",label:"History",
+    {key:"run" as const,   icon:"🚀",label:"Тооцоолол"},
+    {key:"data" as const,  icon:"📂",label:"Өгөгдөл"},
+    {key:"history" as const,icon:"🕑",label:"Түүх",
       badge:s.jobs.filter(j=>j.status==="done").length},
   ];
   return(

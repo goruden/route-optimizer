@@ -49,8 +49,8 @@ function DsCard({
             className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold py-1.5 px-2 rounded-lg border transition-all ${rebuildingMatrix ? "border-blue-200 text-blue-400 cursor-not-allowed bg-blue-50" : "border-blue-200 text-blue-500 hover:bg-blue-50"}`}
           >
             {rebuildingMatrix
-              ? <><span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />Building…</>
-              : <>↺ Rebuild Matrix</>
+              ? <><span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />Матрицыг үүсгэж байна...</>
+              : <>↺ шинэчлэх</>
             }
           </button>
           <a
@@ -59,7 +59,7 @@ function DsCard({
             className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold py-1.5 px-2 rounded-lg border border-green-200 text-green-600 hover:bg-green-50 transition-all no-underline"
             onClick={e => e.stopPropagation()}
           >
-            ⬇ Export
+            ⬇ Татах
           </a>
         </div>
       )}
@@ -244,20 +244,20 @@ export function DataPanel() {
 
   function makeCreationSteps(): Step[] {
     return [
-      { id: "create", label: "Creating dataset record", status: "waiting" },
-      { id: "stores", label: "Loading stores & vehicles", status: "waiting" },
-      { id: "osrm", label: "Connecting to OSRM router", status: "waiting" },
-      { id: "matrix", label: "Computing distance matrix", sublabel: "This may take 1–3 minutes for large datasets", status: "waiting" },
-      { id: "save", label: "Saving matrix to database", status: "waiting" },
+      { id: "create", label: "Дата өгөгдлийг үүсгэж байна", status: "waiting" },
+      { id: "stores", label: "Өгөгдлийг оруулж байна", status: "waiting" },
+      { id: "osrm", label: "OSRM руу холбогдож байна", status: "waiting" },
+      { id: "matrix", label: "Зайны матрицыг тооцож байна", sublabel: "1-3 минут хүлээгээрэй", status: "waiting" },
+      { id: "save", label: "Матрицыг өгөгдлийн санд хадаглаж байна", status: "waiting" },
     ];
   }
 
   function makeMatrixSteps(): Step[] {
     return [
-      { id: "osrm", label: "Connecting to OSRM server", status: "waiting" },
-      { id: "nodes", label: "Preparing store coordinates", status: "waiting" },
-      { id: "compute", label: "Computing all routes", sublabel: "OSRM calculating optimal paths between all stores", status: "waiting" },
-      { id: "save", label: "Saving matrix to database", status: "waiting" },
+      { id: "osrm", label: "OSRM руу холбогдож байна", status: "waiting" },
+      { id: "nodes", label: "Дэлгүүрүүдийн байршлыг бэлтгэж байна", status: "waiting" },
+      { id: "compute", label: "Бүх замыг тооцоолж байна", sublabel: "OSRM бүх дэлгүүр хоорондын замыг тооцож байна", status: "waiting" },
+      { id: "save", label: "Матрицыг өгөгдлийн санд хадаглаж байна", status: "waiting" },
     ];
   }
 
@@ -310,7 +310,7 @@ export function DataPanel() {
       setDsName(""); setDsSF(null);
       setTimeout(() => {
         setShowCreationProgress(false);
-        showToast("✅ Dataset ready — matrix built!", "success");
+        showToast("✅ Өгөгдөл бэлэн!", "success");
       }, 1200);
 
     } catch (e: any) {
@@ -319,14 +319,14 @@ export function DataPanel() {
       if (activeStep) setStep(activeStep.id, "error", e.message ?? "Failed");
 
       if (currentSteps.find(s => s.id === "matrix" && s.status === "error")) {
-        showToast("Matrix build failed — use Rebuild Matrix later", "error");
+        showToast("Матриц үүсгэхэд алдаа гарлаа", "error");
         setTimeout(() => {
           setShowCreationProgress(false);
         }, 3000);
       } else {
         setTimeout(() => {
           setShowCreationProgress(false);
-          showToast(e.message ?? "Dataset creation failed", "error");
+          showToast(e.message ?? "Өгөгдөл үүсгэхэд алдаа гарлаа", "error");
         }, 2000);
       }
     }
@@ -365,7 +365,7 @@ export function DataPanel() {
       setTimeout(() => {
         setShowMatrixProgress(false);
         setActiveRebuildId(null);
-        showToast("✅ Matrix rebuilt!", "success");
+        showToast("✅ Матрицыг дахин үүсэглээ!", "success");
       }, 1000);
     } catch (e: any) {
       const activeStep = currentSteps.find(s => s.status === "active");
@@ -373,7 +373,7 @@ export function DataPanel() {
       setTimeout(() => {
         setShowMatrixProgress(false);
         setActiveRebuildId(null);
-        showToast(`Matrix rebuild failed: ${e.message}`, "error");
+        showToast(`Матрицыг дахин үүсгэхэд алдаа гарлаа: ${e.message}`, "error");
       }, 2500);
     }
   }
@@ -391,7 +391,7 @@ export function DataPanel() {
       else { await api.addStore(s.activeDatasetId, { ...sf, store_id: String(sf.store_id) }); }
       d({ t: "SET_STORES", v: await api.getStores(s.activeDatasetId) });
       setShowAS(false); setEditSt(null); setSf(blank);
-      showToast(editingStore ? "Store updated" : "Store added", "success");
+      showToast(editingStore ? "Дэлгүүр засагдлаа" : "Дэлгүүр нэмэгдлээ", "success");
     } catch (e: any) { showToast(e.message, "error"); }
   }
 
@@ -399,14 +399,14 @@ export function DataPanel() {
     if (!s.activeDatasetId) return;
     await api.deleteStore(s.activeDatasetId, id);
     d({ t: "SET_STORES", v: await api.getStores(s.activeDatasetId) });
-    showToast("Store removed", "info");
+    showToast("Дэлгүүр устгагдлаа", "info");
   }
 
   async function delVehicle(id: number) {
     if (!s.activeDatasetId) return;
     await api.deleteVehicle(s.activeDatasetId, id);
     d({ t: "SET_VEHICLES", v: await api.getVehicles(s.activeDatasetId) });
-    showToast("Vehicle removed", "info");
+    showToast("Тээврийн хэрэгсэл устгагдлаа", "info");
   }
 
   async function saveVeh() {
@@ -416,7 +416,7 @@ export function DataPanel() {
       else await api.addVehicle(s.activeDatasetId, vf as any);
       d({ t: "SET_VEHICLES", v: await api.getVehicles(s.activeDatasetId) });
       setShowAV(false); setEditVh(null); setVf(vb);
-      showToast(editingVeh ? "Vehicle updated" : "Vehicle added", "success");
+      showToast(editingVeh ? "Тээврийн хэрэгсэл засагдлаа" : "Тээврийн хэрэгсэл нэмэгдлээ", "success");
     } catch (e: any) { showToast(e.message, "error"); }
   }
 
@@ -437,16 +437,16 @@ export function DataPanel() {
       {/* TOP: Datasets */}
       <div style={{ height: topHeight }} className="shrink-0 p-2.5 border-b border-slate-200 bg-white overflow-y-auto">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Datasets</span>
-          <Btn size="sm" variant="ghost" onClick={() => setShowNewDs(true)}>+ New</Btn>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Өгөгдөл</span>
+          <Btn size="sm" variant="ghost" onClick={() => setShowNewDs(true)}>+ Нэмэх</Btn>
         </div>
         <div className="flex flex-col gap-1.5">
           {!s.datasets.length && (
             <div className="flex flex-col items-center justify-center py-6 text-center">
               <span className="text-3xl mb-2">📂</span>
-              <p className="text-[11px] text-slate-500">No datasets yet</p>
+              <p className="text-[11px] text-slate-500">Өгөгдөл байхгүй байна</p>
               <button onClick={() => setShowNewDs(true)} className="mt-2 text-[11px] font-semibold text-blue-500 hover:underline">
-                Create your first dataset →
+                Өгөгдөл үүсгэх →
               </button>
             </div>
           )}
@@ -476,8 +476,7 @@ export function DataPanel() {
             {(["stores", "vehicles"] as const).map(t => (
               <button key={t} onClick={() => setSubTab(t)}
                 className={`flex-1 py-2 text-[11px] font-semibold border-b-[2.5px] flex items-center justify-center gap-1.5 transition-all ${subTab === t ? "border-blue-500 text-blue-500" : "border-transparent text-slate-500"}`}>
-                {t === "stores" ? "🏪" : "🚛"}
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "stores" ? "🏪 Дэлгүүр" : "🚛 Тээврийн хэрэгсэл"}
                 <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ${subTab === t ? "bg-blue-500/12 text-blue-500" : "bg-slate-100 text-slate-500"}`}>
                   {t === "stores" ? s.stores.length : s.vehicles.length}
                 </span>
@@ -497,18 +496,18 @@ export function DataPanel() {
                 if (subTab === "stores") { setSf(blank); setEditSt(null); setShowAS(true); }
                 else { setVf(vb); setEditVh(null); setShowAV(true); }
               }}>
-              + Add
+              +Нэмэх
             </Btn>
           </div>
 
           <div className="shrink-0 px-2.5 py-1 bg-slate-50 text-[10px] text-slate-500 border-b border-slate-200">
-            {subTab === "stores" ? `${fStores.length}/${s.stores.length} stores` : `${fVehs.length}/${s.vehicles.length} vehicles`}
+            {subTab === "stores" ? `${fStores.length}/${s.stores.length} дэлгүүр` : `${fVehs.length}/${s.vehicles.length} тээврийн хэрэгсэл`}
           </div>
 
           <div className="flex-1 overflow-y-auto p-2.5 space-y-2 min-h-0">
             {subTab === "stores" && (
               fStores.length === 0
-                ? <Empty icon="🏪" msg={storeSrch ? "No match" : "No stores yet"} />
+                ? <Empty icon="🏪" msg={storeSrch ? "Тохирох хайлт олдсонгүй" : "Дэлгүүр байхгүй байна"} />
                 : fStores.map((st: any) => (
                   <StoreCard key={st.id} store={st}
                     onEdit={() => { setSf({ store_id: st.store_id, eng_name: st.eng_name, mn_name: st.mn_name, address: st.address, lat: st.lat, lon: st.lon, open_s: st.open_s, close_s: st.close_s, dry_kg: st.dry_kg, dry_cbm: st.dry_cbm, cold_kg: st.cold_kg, cold_cbm: st.cold_cbm }); setEditSt(st); setShowAS(true); }}
@@ -517,7 +516,7 @@ export function DataPanel() {
             )}
             {subTab === "vehicles" && (
               fVehs.length === 0
-                ? <Empty icon="🚛" msg={vehSrch ? "No match" : "No vehicles yet"} />
+                ? <Empty icon="🚛" msg={vehSrch ? "Тохирох хайлт олдсонгүй" : "Тээврийн хэрэгсэл байхгүй байна"} />
                 : fVehs.map((v: any) => (
                   <VehicleCard key={v.id} vehicle={v}
                     onEdit={() => { setVf({ truck_id: v.truck_id, description: v.description, depot: v.depot, cap_kg: v.cap_kg, cap_m3: v.cap_m3, fuel_cost_km: v.fuel_cost_km, vehicle_cost: v.vehicle_cost, labor_cost: v.labor_cost }); setEditVh(v); setShowAV(true); }}
@@ -529,27 +528,26 @@ export function DataPanel() {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500">
           <span className="text-4xl mb-3">📂</span>
-          <p className="font-semibold text-slate-900 text-[13px] mb-1">Select a dataset</p>
-          <p className="text-[11px]">Choose a dataset above to manage its stores and vehicles</p>
+          <p className="font-semibold text-slate-900 text-[13px] mb-1">Өгөгдлөөс сонгоно уу</p>
+          <p className="text-[11px]">Дээрх өгөгдөлүүдээс сонгоно уу</p>
         </div>
       )}
 
       {/* ── Modals ── */}
-      <Modal title="💾 New Dataset" open={showNewDs}
+      <Modal title="💾 Шинэ өгөгдөл үүсгэх" open={showNewDs}
         onClose={() => { setShowNewDs(false); setDsName(""); setDsSF(null); }}
         onOk={createDs} okLabel="Create Dataset">
         <div className="flex flex-col gap-3">
-          <Input label="Dataset Name *" value={dsName} onChange={e => setDsName(e.target.value)} placeholder="e.g. March 2026" />
+          <Input label="Өгөгдлийн нэр *" value={dsName} onChange={e => setDsName(e.target.value)} placeholder="e.g. March 2026" />
           <UploadZone label="Stores + Vehicles Excel *" icon="📋" accept=".xlsx" onFile={setDsSF} fileName={dsSF?.name} />
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-[11px] text-blue-600">
-            <strong>ℹ️ Auto-build:</strong> The distance matrix will be built automatically via OSRM after upload.
-            Make sure OSRM is running. This may take 1–3 minutes for large datasets.
+            <strong>ℹ️ Auto-build:</strong> Өгөгдөлийг үүсгэх үед матриц автоматаар үүснэ.
           </div>
         </div>
       </Modal>
 
-      <Modal title={editingStore ? "✏️ Edit Store" : "🏪 Add Store"} open={showAddStore}
-        onClose={() => { setShowAS(false); setEditSt(null); }} onOk={saveStore} okLabel={editingStore ? "Save" : "Add"}>
+      <Modal title={editingStore ? "✏️ Засах" : "🏪 Нэмэх"} open={showAddStore}
+        onClose={() => { setShowAS(false); setEditSt(null); }} onOk={saveStore} okLabel={"Хадгалах"}>
         <div className="grid grid-cols-2 gap-3">
           {!editingStore && <div className="col-span-2"><Input label="Store ID *" value={sf.store_id} onChange={e => setSf({ ...sf, store_id: e.target.value })} /></div>}
           <Input label="Name EN" value={sf.eng_name} onChange={e => setSf({ ...sf, eng_name: e.target.value })} />
@@ -566,8 +564,8 @@ export function DataPanel() {
         </div>
       </Modal>
 
-      <Modal title={editingVeh ? "✏️ Edit Vehicle" : "🚛 Add Vehicle"} open={showAddVeh}
-        onClose={() => { setShowAV(false); setEditVh(null); }} onOk={saveVeh} okLabel={editingVeh ? "Save" : "Add"}>
+      <Modal title={editingVeh ? "✏️ Засах" : "🚛 Нэмэх"} open={showAddVeh}
+        onClose={() => { setShowAV(false); setEditVh(null); }} onOk={saveVeh} okLabel={"Хадгалах"}>
         <div className="grid grid-cols-2 gap-3">
           {!editingVeh && <Input label="Truck ID *" value={vf.truck_id} onChange={e => setVf({ ...vf, truck_id: e.target.value })} />}
           <Input label="Description" value={vf.description} onChange={e => setVf({ ...vf, description: e.target.value })} />

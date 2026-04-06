@@ -50,7 +50,7 @@ export default function Authentication() {
 
   const handleLogin = async () => {
     if (!username.trim() || !password) {
-      d({ t: "AUTH_LOGIN_FAILURE", error: "Please enter both username and password" });
+      d({ t: "AUTH_LOGIN_FAILURE", error: "Нэр нууц үгийг оруулна уу" });
       return;
     }
     d({ t: "AUTH_LOGIN_START" });
@@ -58,7 +58,7 @@ export default function Authentication() {
       const res = await api.login(username.trim(), password);
       d({ t: "AUTH_LOGIN_SUCCESS", user: res.username });
     } catch (e: any) {
-      d({ t: "AUTH_LOGIN_FAILURE", error: e.message ?? "Login failed" });
+      d({ t: "AUTH_LOGIN_FAILURE", error: e.message ?? "Нэвтэрхэд алдаа гарлаа" });
     }
   };
 
@@ -71,7 +71,7 @@ export default function Authentication() {
       <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600 text-sm">Redirecting…</p>
+          <p className="text-slate-600 text-sm">Нэвтэрч байна</p>
         </div>
       </div>
     );
@@ -87,19 +87,19 @@ export default function Authentication() {
             🗺
           </div>
           <h1 className="text-[22px] font-extrabold text-slate-900">Route Optimizer</h1>
-          <p className="text-[12px] text-slate-500 mt-1">Sign in to continue</p>
+          <p className="text-[12px] text-slate-500 mt-1">Нэвтрэх</p>
         </div>
 
         {/* Form */}
         <div className="space-y-4">
           <Input
             id="username"
-            label="Username"
+            label="Нэр"
             type="text"
             value={username}
             onChange={e => setUsername(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter your username"
+            placeholder="Нэрээ оруулна уу"
             disabled={s.auth.loading}
             autoComplete="username"
             autoFocus
@@ -108,12 +108,12 @@ export default function Authentication() {
           <div className="relative">
             <Input
               id="password"
-              label="Password"
+              label="Нууц үг"
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Enter your password"
+              placeholder="Нууц үгээ оруулна уу"
               disabled={s.auth.loading}
               autoComplete="current-password"
             />
@@ -140,7 +140,7 @@ export default function Authentication() {
             loading={s.auth.loading}
             disabled={!username || !password || s.auth.loading}
           >
-            {s.auth.loading ? "Signing in…" : "Sign In →"}
+            {s.auth.loading ? "Нэвтэрч байна..." : "Нэвтрэх →"}
           </Btn>
         </div>
       </div>

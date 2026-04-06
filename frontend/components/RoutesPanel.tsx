@@ -56,8 +56,8 @@ export function RoutesPanel() {
   if (!rows.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
       <span className="text-5xl">🚚</span>
-      <p className="font-semibold text-slate-900">No routes yet</p>
-      <p className="text-[12px]">Run optimization to see route summary</p>
+      <p className="font-semibold text-slate-900">Чиглэл байхгүй байна</p>
+      <p className="text-[12px]">Шинээр тооцоолол хийнэ үү</p>
     </div>
   );
 
@@ -87,12 +87,12 @@ export function RoutesPanel() {
       {/* KPI bar */}
       <div className="shrink-0 flex gap-3 px-4 pt-3 pb-1 overflow-x-auto">
         {[
-          { l: "Avg util",   v: `${avgUtil.toFixed(1)}%`,                                                                           c: utilColor(avgUtil) },
-          { l: "Man-hours",  v: `${totalManHours.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}h`,     c: "rgb(139 92 246)" },
-          { l: "Fuel",       v: `₮${Math.round(totalFuel).toLocaleString()}`,                                                       c: "rgb(245 158 11)" },
-          { l: "Fixed",      v: `₮${Math.round(totalFixed).toLocaleString()}`,                                                      c: "rgb(123 130 160)" },
-          { l: "Labor",      v: `₮${Math.round(totalLabor).toLocaleString()}`,                                                      c: "rgb(123 130 160)" },
-          { l: "Total cost", v: `₮${Math.round(totalCost).toLocaleString()}`,                                                       c: "rgb(245 158 11)" },
+          { l: "Дундаж",   v: `${avgUtil.toFixed(1)}%`,                                                                           c: utilColor(avgUtil) },
+          { l: "Хүн цаг",  v: `${totalManHours.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}h`,     c: "rgb(139 92 246)" },
+          { l: "Түлш",       v: `₮${Math.round(totalFuel).toLocaleString()}`,                                                       c: "rgb(245 158 11)" },
+          { l: "Тогтмол",      v: `₮${Math.round(totalFixed).toLocaleString()}`,                                                      c: "rgb(123 130 160)" },
+          { l: "Ажлын зардал",      v: `₮${Math.round(totalLabor).toLocaleString()}`,                                                      c: "rgb(123 130 160)" },
+          { l: "Нийт зардал", v: `₮${Math.round(totalCost).toLocaleString()}`,                                                       c: "rgb(245 158 11)" },
         ].map(k => (
           <div key={k.l} className="shrink-0 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
             <div className="text-[10px] text-slate-500 mb-0.5">{k.l}</div>
@@ -125,7 +125,7 @@ export function RoutesPanel() {
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-slate-500 font-mono">{filtered.length} routes</span>
+        <span className="text-[11px] text-slate-500 font-mono">{filtered.length} зогсоол</span>
 
         {/* Edit routes button — opens RouteBuilderModal */}
         <div className="ml-auto">
@@ -133,18 +133,18 @@ export function RoutesPanel() {
             <button
               onClick={() => {
                 if (!s.stopDetails.length) {
-                  showToast("No stop details available for editing", "info");
+                  showToast("Зогсоолын мэдээлэл байхгүй байна", "info");
                   return;
                 }
                 setShowEditModal(true);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border-[1.5px] border-violet-300 text-violet-500 bg-violet-500/6 hover:bg-violet-500/12 transition-all"
             >
-              ✏️ Edit Routes
+              ✏️ Засах
             </button>
           ) : (
             <span className="text-[10px] text-slate-400 italic">
-              (Editing requires a dataset-backed job)
+              (Засвар оруулахын тулд өгөгдөл байх ёстой)
             </span>
           )}
         </div>
@@ -216,7 +216,7 @@ export function RoutesPanel() {
         open={showEditModal}
         onClose={() => setShowEditModal(false)}
         mode="edit"
-        initialTitle={`${s.summary?.mode ?? "Edited"} Routes (edited)`}
+        initialTitle={`${s.summary?.mode ?? "Edited"} (edited)`}
         initialRoutes={editInitialRoutes}
         datasetId={editDatasetId}
         groupId={editGroupId ?? undefined}

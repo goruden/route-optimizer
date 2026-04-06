@@ -210,7 +210,7 @@ export default function MapPanel() {
           <div className="bg-white/95 backdrop-blur rounded-2xl p-8 text-center shadow-xl border border-slate-200 max-w-xs">
             <div className="text-5xl mb-3">🗺️</div>
             <div className="text-[16px] font-bold text-slate-900 mb-2">Ulaanbaatar</div>
-            <div className="text-[12px] text-slate-500 leading-relaxed">Select a dataset to see store locations,<br/>or load a past job to see routes & badges</div>
+            <div className="text-[12px] text-slate-500 leading-relaxed">Өгөгдлөөс сонгоно уу</div>
           </div>
         </div>
       )}
@@ -245,7 +245,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3 flex-1">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Routes</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Чиглэл</span>
             <div className="flex gap-1.5">
               <button onClick={() => d({ t: "TOGGLE_ALL", v: !allOn })}
                 className="px-2 py-1 text-[10px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors">
@@ -283,7 +283,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
         {/* route list */}
         <div className="overflow-y-auto flex flex-col gap-0.5 p-1.5 flex-1">
           {visible.length === 0
-            ? <p className="text-[11px] text-slate-500 text-center py-3">No {fleetFilter} routes</p>
+            ? <p className="text-[11px] text-slate-500 text-center py-3">Чиглэл байхгүй байна {fleetFilter}</p>
             : visible.map(route => {
                 const on = routeVis[route.route_id] !== false;
                 return (
@@ -294,9 +294,9 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
                     <div className="w-7 h-1 rounded-full shrink-0" style={{ background: route.color }} />
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] font-bold text-slate-900 truncate">
-                        {route.truck_id}<span className="font-normal text-slate-500 ml-1">T{route.trip_number}</span>
+                        {route.truck_id}<span className="font-normal text-slate-500 ml-1">Х{route.trip_number}</span>
                       </div>
-                      <div className="text-[9px] text-slate-500">{route.fleet} · {route.stops.length} stops · {route.summary.distance_km}km</div>
+                      <div className="text-[9px] text-slate-500">{route.fleet} · {route.stops.length} зогсоол · {route.summary.distance_km}km</div>
                     </div>
                     <span className="text-[13px] shrink-0">{on ? "👁" : "🔕"}</span>
                   </button>
@@ -342,12 +342,12 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
               <span className="font-mono text-[10px] bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-md font-bold">#{store.store_id}</span>
               {store.has_dry  && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500">📦 DRY</span>}
               {store.has_cold && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600">❄️ COLD</span>}
-              {dels.length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">✅ {dels.length} delivery</span>}
+              {dels.length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">✅ {dels.length} хүргэлт</span>}
             </div>
             {/* tabs */}
             <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.65)" }}>
               {[
-                { k: "info", l: "📋 Details" },
+                { k: "info", l: "📋 Дэлэгрэнгүй" },
                 ...(dryDels.length  > 0 ? [{ k: "dry",  l: `📦 DRY (${dryDels.length})`  }] : []),
                 ...(coldDels.length > 0 ? [{ k: "cold", l: `❄️ COLD (${coldDels.length})` }] : []),
               ].map(t => (
@@ -375,12 +375,12 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
 function InfoTab({ store }: { store: Store }) {
   return (
     <div className="flex flex-col gap-3">
-      <Card title="📍 Location">
-        {store.address && <Row label="Address" val={store.address} />}
-        {store.detail_addr && <Row label="Detail" val={store.detail_addr} />}
+      <Card title="📍 Байршил">
+        {store.address && <Row label="Хаяг" val={store.address} />}
+        {store.detail_addr && <Row label="Дэлэгрэнгүй" val={store.detail_addr} />}
         <Row label="Lat / Lon" val={`${store.lat.toFixed(5)}, ${store.lon.toFixed(5)}`} mono />
       </Card>
-      <Card title="🕐 Hours">
+      <Card title="🕐 Цагийн хуваарь">
         <div className="flex items-center gap-4">
           <TimeBox label="Opens"  time={fmtSec(store.open_s)}  color="#10B981" />
           <span className="text-muted">→</span>
@@ -388,7 +388,7 @@ function InfoTab({ store }: { store: Store }) {
         </div>
       </Card>
       {(store.has_dry || store.has_cold) && (
-        <Card title="📊 Daily Demand">
+        <Card title="📊 Өдөр тутмын шаардлага">
           {store.has_dry  && <DBar label="DRY weight"  val={store.dry_kg}   unit="kg" color="#5B7CFA" max={5000} />}
           {store.has_dry  && <DBar label="DRY volume"  val={store.dry_cbm}  unit="m³" color="#5B7CFA" max={20}   />}
           {store.has_cold && <DBar label="COLD weight" val={store.cold_kg}  unit="kg" color="#0EA5E9" max={5000} />}
@@ -406,7 +406,7 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
 
   if (!dels.length) return (
     <div className="flex flex-col items-center justify-center py-10 text-slate-500 text-[12px] text-center">
-      <span className="text-3xl mb-2">📭</span>No {fleet} deliveries scheduled.
+      <span className="text-3xl mb-2">📭</span>{fleet} Хүргэлт хувиарлагдаагүй байна.
     </div>
   );
 
@@ -416,7 +416,7 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
         <span className="text-2xl">{fleet === "DRY" ? "📦" : "❄️"}</span>
         <div>
           <div className="text-[13px] font-bold" style={{ color: baseColor }}>{fleet === "DRY" ? "DRY DC" : "COLD DC"}</div>
-          <div className="text-[11px] text-slate-500">Departs {fleet === "DRY" ? "13:00" : "03:00"} · {dels.length} trip{dels.length > 1 ? "s" : ""}</div>
+          <div className="text-[11px] text-slate-500">Хүргэлт {fleet === "DRY" ? "13:00" : "03:00"} цагт эхлэнэ · {dels.length}-р хүргэлт{dels.length > 1 ? "ууд" : ""}</div>
         </div>
       </div>
       <div className="relative pl-7">
@@ -433,13 +433,13 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-[3px] shrink-0" style={{ background: rc }} />
-                    <span className="text-[12px] font-bold" style={{ color: rc }}>🚚 {dd.truck_id} · Trip {dd.trip_number}</span>
+                    <span className="text-[12px] font-bold" style={{ color: rc }}>🚚 {dd.truck_id} · Хүргэлт {dd.trip_number}</span>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: rc + "18", color: rc }}>Stop #{dd.stop_order}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: rc + "18", color: rc }}>Зогсоол #{dd.stop_order}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                  <TBox label="Arrives"  time={dd.arrival}   color="#10B981" />
-                  <TBox label="Departs"  time={dd.departure} color="#EF4444" />
+                  <TBox label="Ирэх"  time={dd.arrival}   color="#10B981" />
+                  <TBox label="Явах"  time={dd.departure} color="#EF4444" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <DPill icon="⚖️" label="Weight" val={`${dd.demand_kg.toFixed(1)} kg`} />

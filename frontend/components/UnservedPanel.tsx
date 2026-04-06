@@ -31,15 +31,15 @@ export function UnservedPanel() {
   if (!unserved.length && s.summary) return (
     <div className="flex flex-col items-center justify-center h-full gap-3">
       <span className="text-5xl">✅</span>
-      <p className="font-bold text-[16px] text-green-500">All stores served!</p>
-      <p className="text-[12px] text-slate-500">0 unserved stores in this run.</p>
+      <p className="font-bold text-[16px] text-green-500">Бүр дэлгүүр амжилттай хүргэгдсэн байна!</p>
+      <p className="text-[12px] text-slate-500">Үлдсэн дэлгүүр 0</p>
     </div>
   );
   if (!unserved.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
       <span className="text-5xl">⚠️</span>
-      <p className="font-semibold text-slate-900">No data yet</p>
-      <p className="text-[12px]">Run optimization to see unserved stores</p>
+      <p className="font-semibold text-slate-900">Өгөгдөл байхгүй байна</p>
+      <p className="text-[12px]">Шинээр тооцолол хийнэ үү</p>
     </div>
   );
 
@@ -52,7 +52,7 @@ export function UnservedPanel() {
       {/* warning banner */}
       <div className="shrink-0 mx-4 mt-3 p-3 bg-red-500/6 border border-red-500/20 rounded-xl">
         <div className="text-[12px] font-semibold text-red-500 mb-2">
-          ⚠ {unserved.length} store{unserved.length !== 1 ? "s" : ""} could not be served
+          ⚠ {unserved.length} дэлгүүр хүргэгдээгүй байна
         </div>
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(groups).map(([label, cnt]) => {
@@ -69,7 +69,7 @@ export function UnservedPanel() {
 
       {/* toolbar */}
       <div className="shrink-0 flex items-center gap-2.5 px-4 py-2.5">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search unserved stores…"
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Хүргэгдээгүй дэлгүүрүүдээс хайх..."
           className="flex-1 max-w-70 text-[12px] border border-slate-200 rounded-xl px-3 py-1.5 bg-white outline-none focus:border-blue-500" />
         <div className="flex gap-1.5">
           {["ALL","DRY","COLD"].map(f => (
@@ -80,7 +80,7 @@ export function UnservedPanel() {
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-red-500 font-mono ml-auto">{filtered.length} stores</span>
+        <span className="text-[11px] text-red-500 font-mono ml-auto">{filtered.length} Дэлгүүр</span>
       </div>
 
       {/* table */}

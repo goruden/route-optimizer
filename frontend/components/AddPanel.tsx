@@ -340,7 +340,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
           <select value={route.vehicleId} onChange={(e) => onVehicleChange(e.target.value)}
             className="w-full text-[11px] font-semibold bg-white/70 border border-white rounded-lg px-2 py-1.5 outline-none focus:border-blue-400"
             style={{ color: fleetColor }}>
-            <option value="">— Select vehicle —</option>
+            <option value="">— Тээврийн хэрэгсэл сонгох —</option>
             {vehicles.map((v) => (<option key={v.truck_id} value={v.truck_id}>{v.truck_id} · {v.fleet} · {v.cap_kg.toLocaleString()}kg | {v.cap_m3.toLocaleString()}m³</option>))}
           </select>
         </div>
@@ -350,11 +350,11 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
             <button onClick={autoSort} disabled={!hasGeoData}
               className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ background: hasGeoData ? "#ECFDF5" : "#F8FAFC", borderColor: hasGeoData ? "#6EE7B7" : "#CBD5E1", color: hasGeoData ? "#059669" : "#94A3B8" }}>
-              ✦ Sort
+              ✦ Эрэмбэлэх
             </button>
             <button onClick={() => onReorderStops([...route.stops].reverse())}
               className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-all">
-              ⇄ Rev
+              ⇄ Урвуу
             </button>
           </div>
         )}
@@ -363,10 +363,10 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
 
       <div className="bg-white px-3 py-3 flex-1">
         {route.stops.length === 0 && !showDrop && (
-          <div className="text-[11px] text-slate-400 italic text-center py-4">No stops yet — click "＋ Add Stop" to begin</div>
+          <div className="text-[11px] text-slate-400 italic text-center py-4">Зогсоол байхгүй байна — "+ Нэмэх" товчийг дарж эхлүүлнэ үү</div>
         )}
         {route.stops.length >= 2 && (
-          <div className="text-[9px] text-slate-400 mb-2 flex items-center gap-1"><span>↕</span><span>Drag to reorder · ◀ ▶ buttons · ✦ Sort for nearest-neighbour</span></div>
+          <div className="text-[9px] text-slate-400 mb-2 flex items-center gap-1"><span>↕</span><span>Чирч дараалал өөрчлөх · ◀ ▶ товчнууд · ✦ Хамгийн ойр дарааллаар эрэмбэлэх</span></div>
         )}
         <div className="flex gap-2 flex-wrap" style={{ minHeight: route.stops.length > 0 ? 96 : 0 }} onDragOver={(e) => e.preventDefault()}>
           {route.stops.map((stop, idx) => (
@@ -386,7 +386,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
             <button onClick={() => setShowDrop((d) => !d)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border-[1.5px] border-dashed text-[11px] font-semibold transition-all hover:bg-blue-50"
               style={{ borderColor: fleetColor + "80", color: fleetColor }}>
-              <span className="text-[14px]">＋</span> Add Stop
+              <span className="text-[14px]">＋</span> Зогсоол нэмэх
             </button>
           </div>
         </div>
@@ -424,12 +424,12 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
           style={{ width: 260, top: dropRef.current ? `${dropRef.current.getBoundingClientRect().top - 10}px` : "auto", left: dropRef.current ? `${dropRef.current.getBoundingClientRect().right + 10}px` : "auto" }}>
           <div className="p-2 border-b border-slate-100">
             <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${fleet} stores…`}
+              placeholder={`${fleet} дэлгүүр хайх…`}
               className="w-full text-[11px] px-2.5 py-1.5 border border-slate-200 rounded-lg outline-none focus:border-blue-400" />
           </div>
           <div className="max-h-52 overflow-y-auto">
             {filteredStores.length === 0
-              ? <div className="text-[11px] text-slate-400 text-center py-5">No matching stores</div>
+              ? <div className="text-[11px] text-slate-400 text-center py-5">Тохирох дэлгүүр олдсонгүй</div>
               : filteredStores.map((store) => {
                 const demand = fleet === "DRY" ? store.dry_kg : store.cold_kg;
                 return (
@@ -677,8 +677,8 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white text-[20px] shadow-sm">🗺</div>
             <div>
-              <h2 className="text-[15px] font-extrabold text-slate-900">{mode === "edit" ? "✏️ Edit Routes" : "📝 Manual Route Builder"}</h2>
-              <p className="text-[10px] text-slate-400 mt-0.5">Assign stores to vehicles · drag to reorder · ✦ Sort for nearest-neighbour</p>
+              <h2 className="text-[15px] font-extrabold text-slate-900">{mode === "edit" ? "✏️ Засварлах" : "📝 Гараар зам бүтээх"}</h2>
+              <p className="text-[10px] text-slate-400 mt-0.5">Дэлгүүрүүдийг тээврийн хэрэгслээр хуваарилах · чирч дараалал өөрчлөх · ✦ Хамгийн ойр дарааллаар эрэмбэлэх</p>
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-[13px] text-slate-500 hover:bg-slate-50">✕</button>
@@ -689,39 +689,39 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
           <div className="grid grid-cols-4 gap-3 mb-3">
             {/* Title */}
             <div className="col-span-2">
-              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Title *</label>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Friday DRY Routes"
+              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Нэр *</label>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="жишээ: DRY чиглэлүүд"
                 className="w-full text-[12px] font-semibold border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 bg-white" />
             </div>
 
             {/* Dataset selector — BUG FIX: properly controlled */}
             <div>
-              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Dataset *</label>
+              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Өгөгдөл *</label>
               <select
                 value={dsId}
                 onChange={(e) => setDsId(e.target.value)}
                 className="w-full text-[11px] border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 bg-white font-medium"
               >
-                <option value="">— Select dataset —</option>
+                <option value="">— Өгөгдөл сонгох —</option>
                 {s.datasets.map((ds) => (
-                  <option key={ds.id} value={ds.id}>{ds.name} ({ds.store_count} stores)</option>
+                  <option key={ds.id} value={ds.id}>{ds.name} ({ds.store_count} дэлгүүр)</option>
                 ))}
               </select>
             </div>
 
             {/* Group selector + create */}
             <div>
-              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Group (optional)</label>
+              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">Бүлэг</label>
               <div className="flex gap-1">
                 <select value={groupId} onChange={(e) => setGroupId(e.target.value)}
                   className="flex-1 min-w-0 text-[11px] border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 bg-white">
-                  <option value="none">— Standalone —</option>
+                  <option value="none">— Ганцаарчилсан —</option>
                   {s.runGroups.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
                 </select>
                 {/* BUG FIX: Add create new group button */}
                 <button
                   onClick={() => setShowNewGroup(v => !v)}
-                  title="Create new group"
+                  title="Шинэ бүлэг үүсгэх"
                   className="w-9 shrink-0 flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 transition-all text-[16px]"
                 >
                   +
@@ -734,13 +734,13 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
                     value={newGroupName}
                     onChange={e => setNewGroupName(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") createGroup(); if (e.key === "Escape") setShowNewGroup(false); }}
-                    placeholder="Group name…"
+                    placeholder="Бүлгийн нэр..."
                     className="flex-1 text-[11px] border border-blue-300 rounded-lg px-2 py-1.5 outline-none focus:border-blue-500 bg-white"
                   />
                   <button onClick={createGroup} disabled={creatingGroup || !newGroupName.trim()}
                     className="text-[11px] font-bold px-2 py-1.5 rounded-lg bg-blue-500 text-white disabled:opacity-40 hover:bg-blue-600 transition-all flex items-center gap-1">
                     {creatingGroup ? <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> : null}
-                    Create
+                    Үүсгэх
                   </button>
                 </div>
               )}
@@ -753,8 +753,8 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
             {dsId && (
               <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-[10px]">
                 {dataLoading
-                  ? <><span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-blue-500">Loading…</span></>
-                  : <><span className="text-green-500">✓</span><span className="text-slate-600 font-semibold">{stores.length} stores · {vehicles.length} vehicles</span></>
+                  ? <><span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-blue-500">Ачаалж байна…</span></>
+                  : <><span className="text-green-500">✓</span><span className="text-slate-600 font-semibold">{stores.length} дэлгүүр · {vehicles.length} тээврийн хэрэгсэл</span></>
                 }
               </div>
             )}
@@ -770,13 +770,13 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
             </div>
 
             <div className="flex-1 max-w-xs">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search routes or stores..."
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Чиглэл эсвэл дэлгүүр хайх..."
                 className="w-full px-3 py-1.5 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
             </div>
 
             <button onClick={importFile}
               className="flex items-center gap-1.5 text-[11px] font-semibold border border-emerald-300 rounded-lg px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all ml-auto">
-              📥 Import File
+              📥 Файл импортлох
             </button>
           </div>
         </div>
@@ -784,9 +784,9 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
         {/* Import warnings */}
         {importWarnings.length > 0 && (
           <div className="shrink-0 mx-4 mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-            <div className="text-[11px] font-semibold text-amber-600 mb-1">⚠ {importWarnings.length} import warning(s):</div>
+            <div className="text-[11px] font-semibold text-amber-600 mb-1">⚠ {importWarnings.length} анхааруулга:</div>
             <div className="max-h-16 overflow-y-auto space-y-0.5">{importWarnings.map((w, i) => <div key={i} className="text-[10px] text-amber-600">{w}</div>)}</div>
-            <button onClick={() => setImportWarnings([])} className="text-[10px] text-amber-500 hover:underline mt-1">Dismiss</button>
+            <button onClick={() => setImportWarnings([])} className="text-[10px] text-amber-500 hover:underline mt-1">Хаах</button>
           </div>
         )}
 
@@ -795,21 +795,21 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
           {!dsId && (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <div className="text-5xl mb-3">📂</div>
-              <p className="font-semibold text-slate-600 mb-1">Select a dataset to begin</p>
-              <p className="text-[11px]">Choose a dataset above to load vehicles and stores</p>
+              <p className="font-semibold text-slate-600 mb-1">Эхлэхийн тулд өгөгдөл сонгоно уу</p>
+              <p className="text-[11px]">Дээрх өгөгдлөөс сонгож тээврийн хэрэгсэл болон дэлгүүрүүдийг идэвхжүүлнэ үү</p>
             </div>
           )}
           {dsId && dataLoading && (
             <div className="flex flex-col items-center justify-center py-12 text-slate-400">
               <span className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-[12px] font-semibold text-slate-600">Loading dataset…</p>
+              <p className="text-[12px] font-semibold text-slate-600">Өгөгдлийг ачаалж байна…</p>
             </div>
           )}
           {dsId && !dataLoading && routes.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <div className="text-5xl mb-3">🛣️</div>
-              <p className="font-semibold text-slate-600 mb-1">No routes yet</p>
-              <p className="text-[11px]">Click "＋ Add Route" below or "📥 Import File" above</p>
+              <p className="font-semibold text-slate-600 mb-1">Чиглэл байхгүй байна</p>
+              <p className="text-[11px]">Доорх "+ Чиглэл нэмэх" товч эсвэл дээрх "📥 Файл импортлох" товчийг дарна уу</p>
             </div>
           )}
           {dsId && !dataLoading && filteredRoutes.map((route, i) => (
@@ -826,16 +826,16 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
         {/* Footer */}
         <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-t border-slate-200 bg-slate-50">
           <div className="flex items-center gap-2">
-            <Btn size="sm" variant="ghost" onClick={addRoute} disabled={!dsId || dataLoading}>＋ Add Route</Btn>
+            <Btn size="sm" variant="ghost" onClick={addRoute} disabled={!dsId || dataLoading}>＋ Чиглэл нэмэх</Btn>
             {hasAnySortable && (
-              <Btn size="sm" variant="ghost" onClick={autoSortAllRoutes} title="Sort all routes by nearest-neighbour">✦ Sort All</Btn>
+              <Btn size="sm" variant="ghost" onClick={autoSortAllRoutes} title="Бүх чиглэлийг хамгийн ойр дарааллаар эрэмбэлэх">✦ Бүгдийг эрэмбэлэх</Btn>
             )}
-            {routes.length > 0 && <span className="text-[10px] text-slate-400">{routes.length} routes · {totalStops} stops</span>}
+            {routes.length > 0 && <span className="text-[10px] text-slate-400">{routes.length} чиглэл · {totalStops} зогсоол</span>}
           </div>
           <div className="flex items-center gap-2">
-            <Btn size="sm" variant="ghost" onClick={onClose}>Cancel</Btn>
+            <Btn size="sm" variant="ghost" onClick={onClose}>Цуцлах</Btn>
             <Btn size="sm" variant="primary" loading={loading} onClick={save} disabled={!dsId}>
-              💾 {mode === "edit" ? "Save New Version" : "Create Routes"}
+              💾 {mode === "edit" ? "Шинэ хувилбар хадгалах" : "Чиглэл үүсгэх"}
             </Btn>
           </div>
         </div>

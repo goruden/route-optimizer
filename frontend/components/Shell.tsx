@@ -13,10 +13,10 @@ import { Toaster, Btn, Confirm } from "./ui";
 const MapPanel = dynamic(() => import("./MapPanel"), { ssr: false });
 
 const TABS = [
-  { key: "map",      icon: "🗺",  label: "Map"      },
-  { key: "routes",   icon: "🚚",  label: "Routes"   },
-  { key: "stops",    icon: "📍",  label: "Stops"    },
-  { key: "unserved", icon: "⚠️", label: "Unserved" },
+  { key: "map",      icon: "🗺",  label: "Газрын зураг"      },
+  { key: "routes",   icon: "🚚",  label: "Чиглэл"   },
+  { key: "stops",    icon: "📍",  label: "Зогсоол"    },
+  { key: "unserved", icon: "⚠️", label: "Үлдсэн" },
 ] as const;
 
 const LOGIN_PATH =
@@ -49,10 +49,10 @@ function InactivityWarning({
           ⏰
         </div>
         <h2 className="text-[16px] font-extrabold text-slate-900 mb-2">
-          Still there?
+          Та байна уу?
         </h2>
         <p className="text-[13px] text-slate-500 mb-1">
-          You'll be logged out due to inactivity in
+          Та үйлдэл хийхгүй байгаа тул таныг автоматаар гаргах болно.
         </p>
         <div
           className="text-[32px] font-mono font-extrabold mb-5"
@@ -65,13 +65,13 @@ function InactivityWarning({
             onClick={onLogout}
             className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
           >
-            Log out now
+            Яг одоо гарах
           </button>
           <button
             onClick={onStay}
             className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-[13px] font-bold hover:bg-blue-600 transition-colors shadow-md"
           >
-            Stay logged in
+            Нэвтэрсэн хэвээр үлдэх
           </button>
         </div>
       </div>
@@ -189,17 +189,17 @@ export function Shell() {
               {/* User badge */}
               {s.auth.user && (
                 <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
-                  👤 {s.auth.user}
+                  {s.auth.user}
                 </span>
               )}
               <Confirm
                 onConfirm={handleLogout}
-                message="Are you sure you want to log out?"
-                cancelText="Cancel"
-                confirmText="Log out"
+                message="Та гарахдаа итгэлтэй байна уу?"
+                cancelText="Цуцлах"
+                confirmText="Гарах"
               >
                 <div className="text-[10px] px-2 py-1 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors text-slate-500 hover:text-slate-900">
-                  Logout ⏻
+                  Гарах ⏻
                 </div>
               </Confirm>
             </div>
@@ -218,44 +218,44 @@ export function Shell() {
             <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ background: dotColor, boxShadow: health === "ok" ? `0 0 6px ${dotColor}` : "none" }} />
             <span className="text-[11px] text-slate-500 whitespace-nowrap">
               {health === "ok"
-                ? `API OK · OSRM ${osrm === "connected" ? "✓" : "⚠ offline"}`
+                ? `Backend ${osrm === "connected" ? "✓" : "⚠ offline"}`
                 : health === "err" ? "Backend unreachable" : "Connecting…"}
             </span>
           </div>
           {summary && <>
             <div className="w-px h-4 bg-slate-200 shrink-0" />
-            <Kpi v={summary.total_served}    label="served"   c="#10B981" />
+            <Kpi v={summary.total_served}    label="хүргэгдсэн"   c="#10B981" />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
-            <Kpi v={summary.total_unserved}  label="unserved" c="#EF4444" />
+            <Kpi v={summary.total_unserved}  label="үлдсэн" c="#EF4444" />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
-            <Kpi v={summary.total_routes}    label="routes"   c="#5B7CFA" />
+            <Kpi v={summary.total_routes}    label="чиглэл"   c="#5B7CFA" />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
             <Kpi
               v={summary.total_man_hours != null
                 ? summary.total_man_hours.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "h"
                 : "-"}
-              label="man-hours" c="#8B5CF6"
+              label="хүн цаг" c="#8B5CF6"
             />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
             <Kpi v={summary.total_dist_km.toLocaleString()} label="km" c="#1A1D2E" />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
-            <Kpi v={"₮" + Math.round(summary.total_cost).toLocaleString()} label="cost" c="#F59E0B" />
+            <Kpi v={"₮" + Math.round(summary.total_cost).toLocaleString()} label="зардал" c="#F59E0B" />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
             <Kpi
-              v={{ cheapest: "💰", fastest: "⚡", shortest: "📏", balanced: "⚖️", geographic: "🗺" }[summary.mode.replace(" (edited)", "")] ?? ""}
-              label={summary.mode.replace(" (edited)", " ✏").toUpperCase()} c="#7B82A0"
+              v={{ cheapest: "💰 Хямд", fastest: "⚡ Хурдан", shortest: "📏 Дөт", balanced: "⚖️ Тэнцвэртэй", geographic: "🗺 Газар зүйн" }[summary.mode] ?? ""}
+              label={''} c="#7B82A0"
             />
           </>}
-          {running && <span className="text-[11px] font-semibold text-blue-500 whitespace-nowrap animate-pulse">⏳ Solving…</span>}
+          {running && <span className="text-[11px] font-semibold text-blue-500 whitespace-nowrap animate-pulse">⏳ Шийдэл бодож байна…</span>}
           {warnings.length > 0 && (
             <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap" title={warnings.join(" | ")}>
-              ⚠ {warnings.length} warning{warnings.length > 1 ? "s" : ""}
+              ⚠ {warnings.length} анхааруулга{warnings.length > 1 ? "ууд" : ""}
             </span>
           )}
           {activeJobId && (
             <a href={api.exportUrl(activeJobId)} download className="ml-auto shrink-0 no-underline">
               <span className="flex items-center gap-1.5 text-[11px] font-bold text-green-500 px-3 py-1 border border-green-500/30 rounded-lg bg-green-500/6 whitespace-nowrap hover:bg-green-500/12 transition-colors">
-                ⬇ Excel
+                ⬇ Татах
               </span>
             </a>
           )}
@@ -288,7 +288,7 @@ export function Shell() {
                   );
                   return mapRoute && routeVis[mapRoute.route_id] !== false && (fleetFilter === "ALL" || route.fleet === fleetFilter);
                 }).length;
-                return visibleCount === 0 ? "No routes selected" : "Route Summary";
+                return visibleCount === 0 ? "Чиглэл сонгогдоогүй байна" : "Чиглэлийн тайлан";
               })()}
             </span>
           </div>
@@ -309,15 +309,15 @@ export function Shell() {
             };
             return (<>
               <div className="w-px h-4 bg-slate-200 shrink-0" />
-              <Kpi v={vs.total_served} label="served" c="#10B981" />
+              <Kpi v={vs.total_served} label="хүргэгдсэн" c="#10B981" />
               <div className="w-px h-4 bg-slate-200 shrink-0" />
-              <Kpi v={vs.total_routes} label="routes" c="#5B7CFA" />
+              <Kpi v={vs.total_routes} label="чиглэл" c="#5B7CFA" />
               <div className="w-px h-4 bg-slate-200 shrink-0" />
-              <Kpi v={vs.total_man_hours.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "h"} label="man-hours" c="#8B5CF6" />
+              <Kpi v={vs.total_man_hours.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "h"} label="хүн цаг" c="#8B5CF6" />
               <div className="w-px h-4 bg-slate-200 shrink-0" />
               <Kpi v={vs.total_dist_km.toLocaleString()} label="km" c="#1A1D2E" />
               <div className="w-px h-4 bg-slate-200 shrink-0" />
-              <Kpi v={"₮" + Math.round(vs.total_cost).toLocaleString()} label="cost" c="#F59E0B" />
+              <Kpi v={"₮" + Math.round(vs.total_cost).toLocaleString()} label="зардал" c="#F59E0B" />
               <div className="w-px h-4 bg-slate-200 shrink-0" />
             </>);
           })()}

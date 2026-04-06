@@ -20,14 +20,14 @@ function GroupCard({group,activeJobId,onClickJob,onForkJob,onRemoveJob,onRename,
         <button onClick={onRename} className="text-[11px] text-slate-400 hover:text-blue-500 w-5 h-5 flex items-center justify-center">✏</button>
         <Confirm onConfirm={()=>onDelete({} as React.MouseEvent)}><button className="text-[11px] text-slate-300 hover:text-red-500 w-5 h-5 flex items-center justify-center">✕</button></Confirm>
       </div>
-      {open&&<div className="p-1.5 flex flex-col gap-1">{!group.jobs.length&&<p className="text-[11px] text-slate-400 px-2 py-1">No versions yet</p>}{group.jobs.map((j:any)=><JobCard key={j.id} job={j} active={activeJobId===j.id} onClickJob={onClickJob} onFork={onForkJob} onRemove={onRemoveJob}/>)}</div>}
+      {open&&<div className="p-1.5 flex flex-col gap-1">{!group.jobs.length&&<p className="text-[11px] text-slate-400 px-2 py-1">Ямар нэгэн хувилбар байхгүй байна</p>}{group.jobs.map((j:any)=><JobCard key={j.id} job={j} active={activeJobId===j.id} onClickJob={onClickJob} onFork={onForkJob} onRemove={onRemoveJob}/>)}</div>}
     </div>
   );
 }
 
 function JobCard({job:j,active,onClickJob,onFork,onRemove}:{job:any;active:boolean;onClickJob:(id:string)=>void;onFork:(id:string,e:React.MouseEvent)=>void;onRemove:(id:string,e:React.MouseEvent)=>void;}){
   const mc=MODE_COLOR[j.mode]??"#7B82A0";
-  const me:Record<string,string>={cheapest:"💰",fastest:"⚡",shortest:"📏",balanced:"⚖️",geographic:"🗺"};
+  const me:Record<string,string>={cheapest:"💰 Хямд",fastest:"⚡ Хурдан",shortest:"📏 Дөт",balanced:"⚖️ Тэнцвэртэй",geographic:"🗺 Газар зүйн"};
   return(
     <div onClick={()=>j.status==="done"&&onClickJob(j.id)}
       className={`rounded-xl border-[1.5px] p-2.5 relative transition-all ${active?"border-blue-500 bg-blue-500/4":"border-slate-200 bg-white"} ${j.status==="done"?"cursor-pointer hover:border-blue-500/50":"opacity-60"}`}>
@@ -36,10 +36,10 @@ function JobCard({job:j,active,onClickJob,onFork,onRemove}:{job:any;active:boole
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:j.status==="done"?"#10B981":j.status==="error"?"#EF4444":"#5B7CFA"}}/>
           <span className="font-semibold text-[11px] text-slate-700 truncate">{j.version_name||`#${j.id.slice(0,8)}`}</span>
-          {j.is_manual&&<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/12 text-violet-500 font-bold shrink-0">manual</span>}
+          {j.is_manual&&<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/12 text-violet-500 font-bold shrink-0">Manual</span>}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:mc+"18",color:mc}}>{me[j.mode]??""} {j.mode?.toUpperCase()}</span>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:mc+"18",color:mc}}>{me[j.mode]??""}</span>
           {j.status==="done"&&<button onClick={e=>onFork(j.id,e)} title="Fork as manual version" className="text-[10px] text-slate-300 hover:text-violet-500 w-5 h-5 flex items-center justify-center">⑂</button>}
           <button onClick={e=>onRemove(j.id,e)} className="text-[10px] text-slate-300 hover:text-red-500 w-5 h-5 flex items-center justify-center">✕</button>
         </div>
@@ -51,7 +51,7 @@ function JobCard({job:j,active,onClickJob,onFork,onRemove}:{job:any;active:boole
         {j.total_cost!=null&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500">₮{Math.round(j.total_cost).toLocaleString()}</span>}
       </div>}
       <div className="text-[9px] text-slate-400">{dayjs(j.created_at).format("MMM DD HH:mm")}</div>
-      {j.status==="done"&&<div className={`text-[9px] font-bold mt-1 ${active?"text-green-500":"text-blue-500"}`}>{active?"✓ Showing on map":"Click to show →"}</div>}
+      {j.status==="done"&&<div className={`text-[9px] font-bold mt-1 ${active?"text-green-500":"text-blue-500"}`}>{active?"✓ Газрын зурагт харуулж байна":"Дарж харах →"}</div>}
     </div>
   );
 }
@@ -77,15 +77,15 @@ export function HistoryPanel(){
     <>
       <div className="shrink-0 flex items-center gap-2 px-3 py-2.5 bg-white border-b border-slate-200">
         <div className="flex gap-1 flex-1">
-          {(["all","groups"] as const).map(v=>(<button key={v} onClick={()=>setView(v)} className={`px-3 py-1 rounded-lg text-[11px] font-semibold border-[1.5px] transition-all ${view===v?"border-blue-500 bg-blue-500/8 text-blue-500":"border-slate-200 text-slate-500"}`}>{v==="all"?"All":"Groups"}</button>))}
+          {(["all","groups"] as const).map(v=>(<button key={v} onClick={()=>setView(v)} className={`px-3 py-1 rounded-lg text-[11px] font-semibold border-[1.5px] transition-all ${view===v?"border-blue-500 bg-blue-500/8 text-blue-500":"border-slate-200 text-slate-500"}`}>{v==="all"?"Бүгд":"Бүлгээр"}</button>))}
         </div>
-        <Btn size="sm" variant="primary" onClick={()=>setShowAddPanel(true)}>+ Add</Btn>
+        <Btn size="sm" variant="primary" onClick={()=>setShowAddPanel(true)}>+ Нэмэх</Btn>
         <Btn size="sm" variant="ghost" loading={loading} onClick={refresh}>↻</Btn>
       </div>
       <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2 min-h-0">
         {view==="groups"?(
           <>
-            {!s.runGroups.length&&<Empty icon="📌" msg="No groups yet"/>}
+            {!s.runGroups.length&&<Empty icon="📌" msg="Ямар нэгэн бүлэг алга байна"/>}
             {s.runGroups.map((g:any)=>(
               <GroupCard key={g.id} group={g} activeJobId={s.activeJobId} onClickJob={clickJob} onForkJob={forkJob} onRemoveJob={removeJob}
                 onRename={()=>{setRenameId(g.id);setRenameName(g.name);}} onDelete={e=>deleteGroup(g.id,e)}/>
@@ -105,11 +105,11 @@ export function HistoryPanel(){
                 {standaloneJobs.map((j:any)=><JobCard key={j.id} job={j} active={s.activeJobId===j.id} onClickJob={clickJob} onFork={forkJob} onRemove={removeJob}/>)}
               </div>
             )}
-            {!s.jobs.length&&<Empty icon="🕑" msg="No runs yet — use Run tab"/>}
+            {!s.jobs.length&&<Empty icon="🕑" msg="Ямар нэгэн тооцоолол алга байна"/>}
           </>
         )}
       </div>
-      <Modal title="✏️ Rename group" open={!!renameId} onClose={()=>setRenameId(null)} onOk={doRename} okLabel="Save"><input value={renameName} onChange={e=>setRenameName(e.target.value)} placeholder="Group name" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-blue-500"/></Modal>
+      <Modal title="✏️ Нэр солих" open={!!renameId} onClose={()=>setRenameId(null)} onOk={doRename} okLabel="Хадгалах"><input value={renameName} onChange={e=>setRenameName(e.target.value)} placeholder="Бүлгийн нэр" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-blue-500"/></Modal>
       <AddPanel open={showAddPanel} onClose={()=>setShowAddPanel(false)} />
     </>
   );

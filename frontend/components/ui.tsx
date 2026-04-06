@@ -79,7 +79,7 @@ export function Toggle({checked,onChange,label}:{checked:boolean;onChange:(v:boo
 }
 
 /* ── Modal ───────────────────────────────────────────── */
-export function Modal({open,onClose,title,children,onOk,okLabel="Save",loading}:{
+export function Modal({open,onClose,title,children,onOk,okLabel="Хадгалах",loading}:{
   open:boolean;onClose:()=>void;title:string;children:ReactNode;onOk?:()=>void;okLabel?:string;loading?:boolean;
 }){
   if(!open) return null;
@@ -94,7 +94,7 @@ export function Modal({open,onClose,title,children,onOk,okLabel="Save",loading}:
         <div className="overflow-y-auto flex-1 p-5">{children}</div>
         {onOk&&(
           <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 shrink-0">
-            <Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn>
+            <Btn variant="ghost" size="sm" onClick={onClose}>Цуцлах</Btn>
             <Btn variant="primary" size="sm" onClick={onOk} loading={loading}>{okLabel}</Btn>
           </div>
         )}
@@ -104,7 +104,7 @@ export function Modal({open,onClose,title,children,onOk,okLabel="Save",loading}:
 }
 
 /* ── Confirm ─────────────────────────────────────────── */
-export function Confirm({onConfirm,children,message="Are you sure?",cancelText="No",confirmText="Yes"}:{onConfirm:()=>void;children:ReactNode;message?:string;cancelText?:string;confirmText?:string;}){
+export function Confirm({onConfirm,children,message="Итгэлтэй байна уу?",cancelText="Үгүй",confirmText="Тийм"}:{onConfirm:()=>void;children:ReactNode;message?:string;cancelText?:string;confirmText?:string;}){
   const[open,setOpen]=useState(false);
   return(
     <>
@@ -495,7 +495,7 @@ function PhaseBar({ elapsed, solverTime }: { elapsed: number; solverTime: number
     { label: "DRY solve",icon: "📦", pct: 5,    end: 45 },
     { label: "COLD solve",icon:"❄️", pct: 45,   end: 85 },
     { label: "OSRM",    icon: "🗺", pct: 85,   end: 95 },
-    { label: "Save",    icon: "💾", pct: 95,   end: 100 },
+    { label: "Хадгалах",    icon: "💾", pct: 95,   end: 100 },
   ];
   const progress = Math.min(100, (elapsed / Math.max(1, solverTime)) * 100);
  
@@ -529,7 +529,7 @@ function PhaseBar({ elapsed, solverTime }: { elapsed: number; solverTime: number
 
 /* ── DatasetCreationProgress ─────────────────────────── */
 export function DatasetCreationModal({
-  open, steps, title="Creating Dataset"
+  open, steps, title="Өгөгдөл үүсгэж байна"
 }:{open:boolean;steps:Step[];title?:string}){
   if(!open) return null;
   const doneCount = steps.filter(s=>s.status==="done").length;
