@@ -575,9 +575,9 @@ async def optimize(
     """
     if mode not in ("fastest", "shortest", "cheapest", "balanced", "geographic"):
         raise HTTPException(400, f"Invalid mode '{mode}'")
-    if not (0.0 <= max_weight_fill <= 1.0):
+    if not (0.0 <= max_weight_fill <= 1.5):
         raise HTTPException(400, "max_weight_fill must be between 0.0 and 1.0")
-    if not (0.0 <= max_volume_fill <= 1.0):
+    if not (0.0 <= max_volume_fill <= 1.5):
         raise HTTPException(400, "max_volume_fill must be between 0.0 and 1.0")
 
     # ── Resolve data (fast — only I/O) ──────────────────────

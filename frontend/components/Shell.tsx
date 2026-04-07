@@ -9,14 +9,15 @@ import { RoutesPanel } from "./RoutesPanel";
 import { StopsPanel } from "./StopsPanel";
 import { UnservedPanel } from "./UnservedPanel";
 import { Toaster, Btn, Confirm } from "./ui";
+import { MapIcon, VehicleIcon, LocationIcon, WarningIcon, ClockIcon, MoneyIcon, LightningIcon, RulerIcon, BalanceIcon } from "./icons";
 
 const MapPanel = dynamic(() => import("./MapPanel"), { ssr: false });
 
 const TABS = [
-  { key: "map",      icon: "🗺",  label: "Газрын зураг"      },
-  { key: "routes",   icon: "🚚",  label: "Чиглэл"   },
-  { key: "stops",    icon: "📍",  label: "Зогсоол"    },
-  { key: "unserved", icon: "⚠️", label: "Үлдсэн" },
+  { key: "map",      icon: <MapIcon size="size-5" />,  label: "Газрын зураг"      },
+  { key: "routes",   icon: <VehicleIcon size="size-5" />,  label: "Чиглэл"   },
+  { key: "stops",    icon: <LocationIcon size="size-5" />,  label: "Зогсоол"    },
+  { key: "unserved", icon: <WarningIcon size="size-5" />, label: "Үлдсэн" },
 ] as const;
 
 const LOGIN_PATH =
@@ -44,19 +45,20 @@ function InactivityWarning({
   return (
     <div className="fixed inset-0 z-9999 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center">
-        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center text-3xl mx-auto mb-4">
-          ⏰
+      <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md text-center">
+        <div className="flex items-center justify-center mx-auto text-red-600">
+          <ClockIcon size="size-8"/>
         </div>
-        <h2 className="text-[16px] font-extrabold text-slate-900 mb-2">
+        <h2 className="text-xl font-extrabold text-slate-900 mb-2">
           Та байна уу?
         </h2>
-        <p className="text-[13px] text-slate-500 mb-1">
-          Та үйлдэл хийхгүй байгаа тул таныг автоматаар гаргах болно.
+        <p className="text-sm text-slate-500 mb-1">
+          Та үйлдэл хийхгүй байгаа тул таныг автоматаар гаргах гэж байна.
         </p>
         <div
-          className="text-[32px] font-mono font-extrabold mb-5"
-          style={{ color: secondsLeft <= 60 ? "#EF4444" : "#F59E0B" }}
+          className={`text-3xl font-mono font-extrabold mb-5 ${
+            secondsLeft <= 60 ? "text-red-500" : "text-amber-500"
+          }`}
         >
           {timeStr}
         </div>
@@ -65,13 +67,13 @@ function InactivityWarning({
             onClick={onLogout}
             className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
           >
-            Яг одоо гарах
+            Гарах
           </button>
           <button
             onClick={onStay}
-            className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-[13px] font-bold hover:bg-blue-600 transition-colors shadow-md"
+            className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-[13px] font-bold hover:bg-red-600 transition-colors shadow-md"
           >
-            Нэвтэрсэн хэвээр үлдэх
+            Үлдэх
           </button>
         </div>
       </div>
@@ -163,7 +165,7 @@ export function Shell() {
   const dotColor = health === "ok" ? "#10B981" : health === "err" ? "#EF4444" : "#F59E0B";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen bg-slate-50">
 
       {/* Inactivity warning dialog */}
       <InactivityWarning
@@ -174,35 +176,40 @@ export function Shell() {
       />
 
       {/* Sidebar */}
-      <div className="w-71.5 shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden shadow-[2px_0_12px_rgba(91,124,250,0.06)]">
+      <div className="w-[20%] max-w-100 bg-white border-r border-slate-200 flex flex-col">
         {/* Logo / header */}
-        <div className="shrink-0 px-4 py-3.5 border-b border-slate-200 bg-linear-to-br from-slate-50 to-blue-50">
+        <div className="px-4 py-3.5 border-b border-slate-200 bg-white">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[15px] font-extrabold tracking-tight leading-tight">
-                <span style={{ background: "linear-gradient(135deg,#3B82F6,#0EA5E9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                  Route Optimizer
+              <div className="tracking-tight flex items-center gap-3">
+                <img
+                  src="/route-optimizer/premium_ologo.svg"
+                  alt="Premium Logo"
+                  className="h-5"
+                />
+                {/* <img
+                  src="/route-optimizer/logo_with_cu.svg"
+                  alt="Premium Logo"
+                  className="object-cover max-h-8"
+                /> */}
+                <span className="text-xl font-extrabold bg-linear-to-l from-red-400 to-red-600 bg-clip-text text-transparent">
+                  Digital Twin – RPT
                 </span>
               </div>
+              
             </div>
-            <div className="flex items-center gap-2">
-              {/* User badge */}
-              {s.auth.user && (
-                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
-                  {s.auth.user}
-                </span>
-              )}
-              <Confirm
-                onConfirm={handleLogout}
-                message="Та гарахдаа итгэлтэй байна уу?"
-                cancelText="Цуцлах"
-                confirmText="Гарах"
-              >
-                <div className="text-[10px] px-2 py-1 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors text-slate-500 hover:text-slate-900">
-                  Гарах ⏻
-                </div>
-              </Confirm>
-            </div>
+
+            {/* User badge //todo drop down or something*/}
+            <Confirm
+              onConfirm={handleLogout}
+              message="Та гарахдаа итгэлтэй байна уу?"
+              cancelText="Цуцлах"
+              confirmText="Гарах"
+            >
+              <div className="text-[10px] px-2 py-1 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors text-slate-500 hover:text-slate-900">
+                Гарах ⏻
+              </div>
+            </Confirm>
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -242,7 +249,16 @@ export function Shell() {
             <Kpi v={"₮" + Math.round(summary.total_cost).toLocaleString()} label="зардал" c="#F59E0B" />
             <div className="w-px h-4 bg-slate-200 shrink-0" />
             <Kpi
-              v={{ cheapest: "💰 Хямд", fastest: "⚡ Хурдан", shortest: "📏 Дөт", balanced: "⚖️ Тэнцвэртэй", geographic: "🗺 Газар зүйн" }[summary.mode] ?? ""}
+              v={(() => {
+                const modeIcons = {
+                  cheapest: <div className="flex items-center gap-1 text-orange-600"><MoneyIcon size="size-4" /> Хямд</div>,
+                  fastest: <div className="flex items-center gap-1 text-blue-600"><LightningIcon size="size-4" /> Хурдан</div>,
+                  shortest: <div className="flex items-center gap-1 text-green-600"><RulerIcon size="size-4" /> Дөт</div>,
+                  balanced: <div className="flex items-center gap-1 text-purple-600"><BalanceIcon size="size-4" /> Тэнцвэртэй</div>,
+                  geographic: <div className="flex items-center gap-1 text-sky-600"><MapIcon size="size-4" /> Газар зүйн</div>
+                };
+                return modeIcons[summary.mode as keyof typeof modeIcons] ?? "";
+              })()}
               label={''} c="#7B82A0"
             />
           </>}
@@ -364,7 +380,7 @@ export function Shell() {
   );
 }
 
-function Kpi({ v, label, c }: { v: string | number; label: string; c: string }) {
+function Kpi({ v, label, c }: { v: React.ReactNode; label: string; c: string }) {
   return (
     <div className="flex items-baseline gap-1 shrink-0">
       <span className="font-mono text-[13px] font-bold" style={{ color: c }}>{v}</span>

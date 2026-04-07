@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { useApp } from "@/lib/state";
+import { CheckIcon, WarningIcon } from "./icons";
 
 function classifyReason(r: string): { label: string; color: string } {
   const s = r.toLowerCase();
@@ -30,15 +31,15 @@ export function UnservedPanel() {
 
   if (!unserved.length && s.summary) return (
     <div className="flex flex-col items-center justify-center h-full gap-3">
-      <span className="text-5xl">✅</span>
+      <span className="text-green-600"><CheckIcon size="size-10"/></span>
       <p className="font-bold text-[16px] text-green-500">Бүр дэлгүүр амжилттай хүргэгдсэн байна!</p>
       <p className="text-[12px] text-slate-500">Үлдсэн дэлгүүр 0</p>
     </div>
   );
   if (!unserved.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-      <span className="text-5xl">⚠️</span>
-      <p className="font-semibold text-slate-900">Өгөгдөл байхгүй байна</p>
+      <span className="text-orange-600"><WarningIcon size="size-10" /></span>
+      <p className="font-semibold text-orange-500">Өгөгдөл байхгүй байна</p>
       <p className="text-[12px]">Шинээр тооцолол хийнэ үү</p>
     </div>
   );

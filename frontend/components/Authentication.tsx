@@ -68,10 +68,10 @@ export default function Authentication() {
 
   if (s.auth.isAuthenticated) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600 text-sm">Нэвтэрч байна</p>
+          <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-black text-xl">Нэвтэрч байна...</p>
         </div>
       </div>
     );
@@ -82,24 +82,26 @@ export default function Authentication() {
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
 
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-blue-500 flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg">
-            🗺
-          </div>
-          <h1 className="text-[22px] font-extrabold text-slate-900">Route Optimizer</h1>
-          <p className="text-[12px] text-slate-500 mt-1">Нэвтрэх</p>
+        <div className="flex flex-col items-center justify-center mb-8 gap-3">
+          <img
+            src="/route-optimizer/logo_with_cu.svg"
+            alt="Premium Logo"
+            className="h-10"
+          />
+          <h1 className="text-3xl font-extrabold bg-linear-to-r from-red-400 to-red-600 bg-clip-text text-transparent">Digital Twin – RPT</h1>
+          {/* <p className="text-[12px] text-slate-500 mt-1">Нэвтрэх</p> */}
         </div>
 
         {/* Form */}
         <div className="space-y-4">
           <Input
             id="username"
-            label="Нэр"
+            label="Хэрэглэгчийн нэр"
             type="text"
             value={username}
             onChange={e => setUsername(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Нэрээ оруулна уу"
+            placeholder="Username"
             disabled={s.auth.loading}
             autoComplete="username"
             autoFocus
@@ -113,7 +115,7 @@ export default function Authentication() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Нууц үгээ оруулна уу"
+              placeholder="Password"
               disabled={s.auth.loading}
               autoComplete="current-password"
             />
@@ -123,7 +125,15 @@ export default function Authentication() {
               className="absolute right-3 bottom-2 text-slate-400 hover:text-slate-600 text-[12px]"
               tabIndex={-1}
             >
-              {showPassword ? "Hide" : "Show"}
+              {showPassword 
+                ? <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
+
+                : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
+              }
             </button>
           </div>
 

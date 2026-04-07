@@ -3,14 +3,35 @@ import { useState, useEffect, useRef } from "react";
 import { useApp } from "@/lib/state";
 import * as api from "@/lib/api";
 import { Btn, SectionLabel, showToast, ProgressBar, SolverTerminal } from "./ui";
+import { StoreIcon, VehicleIcon, CheckIcon, WarningIcon, LightningIcon, RulerIcon, BalanceIcon, MapIcon, MoneyIcon, FolderIcon, TargetIcon, SettingsIcon, TagIcon } from "./icons";
 import type { Dataset } from "@/types/vrp";
 
 const MODE_INFO=[
-  {v:"cheapest",  e:"💰",l:"Хямд",  desc:"Min fuel ₮/km"},
-  {v:"fastest",   e:"⚡",l:"Хурдан",   desc:"Min travel time"},
-  {v:"shortest",  e:"📏",l:"Дөт",  desc:"Min km driven"},
-  {v:"balanced",  e:"⚖️",l:"Тэнцвэртэй",  desc:"Even truck loads"},
-  {v:"geographic",e:"🗺",l:"Газар зүйн",desc:"Tight zone clusters"},
+  { v:"cheapest",  
+    e:<MoneyIcon size="size-6" />,
+    l:"Хямд",  
+    desc:"Min fuel ₮/km"
+  },
+  {v:"fastest",   
+    e:<LightningIcon size="size-6" />,
+    l:"Хурдан",   
+    desc:"Min travel time"
+  },
+  {v:"shortest",  
+    e:<RulerIcon size="size-6" />,
+    l:"Дөт зам",  
+    desc:"Min km driven"
+  },
+  {v:"balanced",  
+    e:<BalanceIcon size="size-6" />,
+    l:"Тэнцвэртэй",  
+    desc:"Even truck loads"
+  },
+  {v:"geographic",  
+    e:<MapIcon size="size-6" />,
+    l:"Газар зүйн",  
+    desc:"Tight zone clusters"
+  },
 ];
 
 export const MODE_COLOR:Record<string,string>={
@@ -20,16 +41,31 @@ export const MODE_COLOR:Record<string,string>={
 
 function DsCard({ds,active,onClick}:{ds:Dataset;active:boolean;onClick:()=>void;}){
   return(
-    <div onClick={onClick} className={`rounded-xl border-[1.5px] p-2.5 cursor-pointer transition-all ${active?"border-blue-500 bg-blue-500/5 shadow-sm":"border-slate-200 bg-white hover:border-blue-500/40 hover:bg-slate-50"}`}>
+    <div onClick={onClick} className={`rounded-xl border-[1.5px] p-2.5 cursor-pointer transition-all ${active?"border-red-500 bg-red-500/5 shadow-sm":"border-slate-200 bg-white hover:border-red-500/40 hover:bg-red-50"}`}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-[12px] font-bold text-slate-900 truncate">{ds.name}</span>
-        {active && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500">ACTIVE</span>}
+        {active && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-500">ACTIVE</span>}
       </div>
       <div className="flex gap-2 text-[10px] text-slate-500">
-        <span>🏪 {ds.store_count}</span>
-        <span>🚛 {ds.vehicle_count}</span>
+        <span className="flex items-center gap-1">
+          <StoreIcon size="size-4" />
+          {ds.store_count}
+        </span>
+        <span className="flex items-center gap-1">
+          <VehicleIcon size="size-4" />
+          {ds.vehicle_count}
+        </span>
         <span className={ds.has_matrix?"text-green-500 font-semibold":"text-amber-500 font-semibold"}>
-          {ds.has_matrix?"✅ matrix":"⚠ no matrix"}
+          {ds.has_matrix
+            ? <div className="flex items-center gap-1">
+                <CheckIcon size="size-4" />
+                matrix
+              </div>
+            :<div className="flex items-center gap-1">
+                <WarningIcon size="size-4" />
+                no matrix
+              </div>
+          }
         </span>
       </div>
     </div>
@@ -97,7 +133,7 @@ export function RunPanel(){
         api.getRunGroups().then(v=>d({t:"SET_GROUPS",v})),
       ]);
       setVersionName("");
-      showToast(`✅ ${result.summary.total_served} хүргэгдсэн, ${result.summary.total_unserved} үлдсэн`,"success");
+      showToast(`${result.summary.total_served} хүргэгдсэн, ${result.summary.total_unserved} үлдсэн`,"success");
 
     }catch(e:any){
       showToast(e.message??"Тооцоололд алдаа гарлаа","error");
@@ -127,7 +163,9 @@ export function RunPanel(){
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
           {/* Dataset selection */}
           <div>
-            <SectionLabel label="📁 Өгөгдөл"/>
+            <SectionLabel action={
+              <FolderIcon />
+            } label="Өгөгдөл"/>
             {!s.datasets.length
               ? <p className="text-[11px] text-slate-500 bg-slate-50 rounded-xl p-3 text-center">Өгөгдөл байхгүй байна</p>
               : <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-0.5">
@@ -143,21 +181,23 @@ export function RunPanel(){
             }
             {s.activeDatasetId && !s.datasets.find(d=>d.id===s.activeDatasetId)?.has_matrix && (
               <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-600 font-medium">
-                ⚠ Матриц байхгүй байна.
+                <WarningIcon /> Матриц байхгүй байна.
               </div>
             )}
           </div>
 
           {/* Mode */}
           <div>
-            <SectionLabel label="🎯 Тооцоолох төрөл"/>
+            <SectionLabel action={
+              <TargetIcon />
+            } label="Тооцоолох төрөл"/>
             <div className="grid grid-cols-3 gap-1.5 mb-1.5">
               {MODE_INFO.slice(0,3).map(m=>{
                 const act=mode===m.v; const c=MODE_COLOR[m.v];
                 return(<button key={m.v} onClick={()=>setMode(m.v)}
-                  className="py-2 rounded-xl border-[1.5px] text-[11px] font-semibold text-center transition-all"
+                  className="py-2 rounded-xl border-[1.5px] text-[11px] font-semibold justify-center items-center text-center transition-all flex flex-col"
                   style={{borderColor:act?c:"rgb(226 232 240)",background:act?c+"14":"#fff",color:act?c:"rgb(100 116 139)",boxShadow:act?`0 2px 8px ${c}30`:"none"}}>
-                  <div className="text-[15px] mb-0.5">{m.e}</div>
+                  <div className="text-[15px] flex items-center justify-center">{m.e}</div>
                   <div className="font-bold text-[10px]">{m.l}</div>
                   <div className="text-[9px] opacity-60">{m.desc}</div>
                 </button>);
@@ -167,9 +207,9 @@ export function RunPanel(){
               {MODE_INFO.slice(3).map(m=>{
                 const act=mode===m.v; const c=MODE_COLOR[m.v];
                 return(<button key={m.v} onClick={()=>setMode(m.v)}
-                  className="py-2 rounded-xl border-[1.5px] text-[11px] font-semibold text-center transition-all"
+                  className="py-2 rounded-xl border-[1.5px] text-[11px] font-semibold justify-center items-center text-center transition-all flex flex-col"
                   style={{borderColor:act?c:"rgb(226 232 240)",background:act?c+"14":"#fff",color:act?c:"rgb(100 116 139)",boxShadow:act?`0 2px 8px ${c}30`:"none"}}>
-                  <div className="text-[15px] mb-0.5">{m.e}</div>
+                  <div className="text-[15px] flex items-center justify-center">{m.e}</div>
                   <div className="font-bold text-[10px]">{m.l}</div>
                   <div className="text-[9px] opacity-60">{m.desc}</div>
                 </button>);
@@ -179,7 +219,9 @@ export function RunPanel(){
 
           {/* Parameters */}
           <div>
-            <SectionLabel label="⚙️ Тохиргоо" />
+            <SectionLabel action={
+              <SettingsIcon />
+            } label="Тохиргоо" />
 
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
 
@@ -194,7 +236,7 @@ export function RunPanel(){
                     className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 text-slate-600 font-bold">−</button>
                   <input type="number" value={trips} min={1} max={5}
                     onChange={e => setTrips(Math.max(1, Math.min(5, Number(e.target.value))))}
-                    className="w-10 text-center text-[13px] font-mono font-bold border border-slate-200 rounded-lg h-7 outline-none focus:ring-2 focus:ring-blue-400 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
+                    className="w-10 text-center text-[13px] font-mono font-bold border border-slate-200 rounded-lg h-7 outline-none focus:ring-2 focus:ring-red-400 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                   <button onClick={() => setTrips(t => Math.min(5, t + 1))}
                     className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 text-slate-600 font-bold">+</button>
                 </div>
@@ -208,17 +250,17 @@ export function RunPanel(){
                     <div className="text-[9px] text-slate-400">Хүргэлт + Агуулах</div>
                   </div>
                   <div className="relative">
-                    <input type="number" value={time} min={1} max={600}
+                    <input type="number" value={time} min={1} max={600}  //! add disabled
                       onChange={e => setTime(Math.max(1, Math.min(600, Number(e.target.value))))}
-                      className="w-14 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
+                      className="w-14 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-red-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 font-medium pointer-events-none">s</span>
                   </div>
                 </div>
                 <div className="flex gap-1.5">
-                  {[30, 60, 120, 300].map(v => (
+                  {[60, 300].map(v => (
                     <button key={v} onClick={() => setTime(v)}
-                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${time===v?"border-blue-500 bg-blue-50 text-blue-600":"border-slate-200 text-slate-400 hover:bg-slate-50"}`}>
-                      {v}s
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${time===v?"border-red-500 bg-red-50 text-red-600":"border-slate-200 text-slate-400 hover:bg-slate-50"}`}>
+                      {v === 60 ? 'Хурдан' : 'Удаан'}
                     </button>
                   ))}
                 </div>
@@ -233,9 +275,9 @@ export function RunPanel(){
                       <div className="text-[9px] text-slate-400">Тээврийн хэрэгслийн массын хувь</div>
                     </div>
                     <div className="relative">
-                      <input type="number" min="0" max="100" value={Math.round(weightFill * 100)}
-                        onChange={e => setWeightFill(Math.max(0, Math.min(100, Number(e.target.value))) / 100)}
-                        className="w-16 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
+                      <input type="number" min="0" max="150" value={Math.round(weightFill * 100)}
+                        onChange={e => setWeightFill(Math.max(0, Math.min(150, Number(e.target.value))) / 100)}
+                        className="w-16 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-red-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 font-medium pointer-events-none">%</span>
                     </div>
                   </div>
@@ -254,7 +296,7 @@ export function RunPanel(){
                     <div className="relative">
                       <input type="number" min="0" max="100" value={Math.round(volumeFill * 100)}
                         onChange={e => setVolumeFill(Math.max(0, Math.min(100, Number(e.target.value))) / 100)}
-                        className="w-16 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
+                        className="w-16 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-red-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 font-medium pointer-events-none">%</span>
                     </div>
                   </div>
@@ -267,25 +309,27 @@ export function RunPanel(){
 
           {/* Version group */}
           <div>
-            <SectionLabel label="📌 Бүлэглэх"/>
+            <SectionLabel action={
+              <TagIcon />
+            } label="Group"/>
             <div className="flex flex-col gap-2">
               <select value={targetGroup} onChange={e=>setTargetGroup(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-blue-500">
-                <option value="none">— ганцаарчилсан —</option>
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-red-500">
+                <option value="none">— Standalone —</option>
                 {s.runGroups.map((g:any)=><option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
               {targetGroup!=="none"&&(
                 <input value={versionName} onChange={e=>setVersionName(e.target.value)}
                   placeholder="Version label (auto if blank)"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-blue-500"/>
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-red-500"/>
               )}
-              <button className="text-[11px] text-blue-500 font-semibold text-left hover:underline"
+              <button className="text-[11px] text-red-500 font-semibold text-left hover:underline"
                 onClick={async()=>{
-                  const name=prompt("Бүлгийн нэр:");if(!name?.trim())return;
+                  const name=prompt("Group name:");if(!name?.trim())return;
                   const g=await api.createRunGroup(name.trim(),s.activeDatasetId??undefined);
                   const groups=await api.getRunGroups();
                   d({t:"SET_GROUPS",v:groups});setTargetGroup(g.id);
-                }}>+ Шинэ бүлэг үүсгэх</button>
+                }}>+ Create new group</button>
             </div>
           </div>
         </div>

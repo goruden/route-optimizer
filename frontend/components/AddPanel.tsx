@@ -5,6 +5,7 @@ import * as api from "@/lib/api";
 import { Btn, showToast } from "./ui";
 import type { Vehicle, Store, StopDetail, RouteSummary } from "@/types/vrp";
 import * as XLSX from "xlsx";
+import { BalanceIcon, BoxIcon, DeleteIcon, GlobalIcon, LocationIcon, MapIcon, SnowflakeIcon, StoreIcon, WarningIcon } from "./icons";
 
 // ── Types ──────────────────────────────────────────────────────────────
 export interface StopEntry {
@@ -302,9 +303,9 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
   const handleDragEnd = useCallback(() => { dragIndexRef.current = null; setDragIndex(null); setOverIndex(null); }, []);
 
   const vehicle = vehicles.find((v) => v.truck_id === route.vehicleId);
-  const fleet = vehicle?.fleet ?? "DRY";
-  const fleetColor = fleet === "DRY" ? "#3B82F6" : "#0EA5E9";
-  const bgColor = fleet === "DRY" ? "#EFF6FF" : "#E0F2FE";
+  const fleet = vehicle?.fleet ?? "Unknown";
+  const fleetColor = fleet === "DRY" ? "#ea580c" : fleet==="Unknown" ? "#7c3aed" : "#0284c7";
+  const bgColor = fleet === "DRY" ? "#fed7aa" : fleet==="Unknown" ? "#ddd6fe" : "#bae6fd";
 
   const hasGeoData = route.stops.some((s) => s.lat != null && s.lon != null);
   const currentDist = routeDistanceKm(route.stops, fleet);
@@ -331,8 +332,8 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
   });
 
   return (
-    <div className="rounded-2xl border shadow-sm flex flex-col" style={{ borderColor: fleetColor + "40" }}>
-      <div className="flex items-center gap-2.5 px-3 py-2" style={{ background: bgColor }}>
+    <div className="rounded-t-2xl border shadow-sm flex flex-col" style={{ borderColor: fleetColor + "40" }}>
+      <div className="flex rounded-t-xl items-center gap-2.5 px-3 py-2" style={{ background: bgColor }}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[15px] font-extrabold text-white shrink-0 shadow-sm" style={{ background: fleetColor }}>
           {vehicle?.truck_id?.slice(0, 3) || "?"}
         </div>
@@ -358,7 +359,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
             </button>
           </div>
         )}
-        <button onClick={onRemove} className="w-7 h-7 rounded-xl flex items-center justify-center text-[12px] text-red-400 hover:text-red-600 hover:bg-red-50 transition-all shrink-0">🗑</button>
+        <button onClick={onRemove} className="w-7 h-7 rounded-xl flex items-center justify-center text-[12px] text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"><DeleteIcon size="size-5"/></button>
       </div>
 
       <div className="bg-white px-3 py-3 flex-1">
@@ -391,7 +392,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
           </div>
         </div>
         {route.stops.length >= 2 && hasGeoData && (
-          <div className="mt-2"><span className="text-[9px] px-2 py-0.5 rounded-full font-mono font-semibold border" style={{ background: fleetColor + "10", borderColor: fleetColor + "30", color: fleetColor }}>📍 Est. ~{currentDist.toFixed(1)} km</span></div>
+          <div className="mt-2"><span className="text-[9px] px-2 py-0.5 rounded-full font-mono font-semibold border flex gap-1" style={{ background: fleetColor + "10", borderColor: fleetColor + "30", color: fleetColor }}><LocationIcon size="size-3"/> Est. ~{currentDist.toFixed(1)} km</span></div>
         )}
       </div>
 
@@ -399,7 +400,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
         <div className="px-3 py-2 grid grid-cols-2 gap-3 border-t" style={{ background: bgColor + "80", borderColor: fleetColor + "20" }}>
           <div>
             <div className="flex justify-between text-[9px] mb-1">
-              <span className="text-slate-500">⚖️ Weight</span>
+              <span className="text-slate-500 flex gap-1"><BalanceIcon size="size-3" /> Weight</span>
               <span className="font-mono font-bold" style={{ color: utilKg > 90 ? "#EF4444" : fleetColor }}>{totalKg.toFixed(0)} / {capKg.toFixed(0)} kg</span>
             </div>
             <div className="h-1.5 bg-white rounded-full overflow-hidden border border-slate-200">
@@ -408,7 +409,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
           </div>
           <div>
             <div className="flex justify-between text-[9px] mb-1">
-              <span className="text-slate-500">📦 Volume</span>
+              <span className="text-slate-500 flex gap-1"><BoxIcon size="size-3"/> Volume</span>
               <span className="font-mono font-bold" style={{ color: utilM3 > 90 ? "#EF4444" : fleetColor }}>{totalM3.toFixed(2)} / {capM3.toFixed(1)} m³</span>
             </div>
             <div className="h-1.5 bg-white rounded-full overflow-hidden border border-slate-200">
@@ -436,7 +437,7 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
                   <button key={store.store_id}
                     onMouseDown={(e) => { e.preventDefault(); onAddStop(store); setSearch(""); setShowDrop(false); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 text-left transition-colors border-b border-slate-50 last:border-none">
-                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-extrabold text-white shrink-0" style={{ background: fleetColor }}>🏪</div>
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-extrabold text-white shrink-0" style={{ background: fleetColor }}><StoreIcon /></div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] font-semibold text-slate-800 truncate">{store.eng_name || store.store_id}</div>
                       <div className="text-[9px] text-slate-400">#{store.store_id} · {demand.toFixed(0)}kg</div>
@@ -654,7 +655,7 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
       d({ t: "SET_MAIN", v: "map" });
       const [jobs, groups] = await Promise.all([api.getJobs(), api.getRunGroups()]);
       d({ t: "SET_JOBS", v: jobs }); d({ t: "SET_GROUPS", v: groups });
-      showToast(`✅ ${routes.length} routes · ${routes.reduce((a, r) => a + r.stops.length, 0)} stops created!`, "success");
+      showToast(`${routes.length} routes · ${routes.reduce((a, r) => a + r.stops.length, 0)} stops created!`, "success");
       onClose();
     } catch (e: any) {
       showToast(e.message ?? "Failed to save routes", "error");
@@ -675,9 +676,9 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-200" style={{ background: "linear-gradient(135deg,#F0F7FF 0%,#E8F4FD 100%)" }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white text-[20px] shadow-sm">🗺</div>
+            <div className="w-10 h-10 rounded-xl bg-purple-500 flex items-center justify-center text-white text-[20px] shadow-sm"><MapIcon /></div>
             <div>
-              <h2 className="text-[15px] font-extrabold text-slate-900">{mode === "edit" ? "✏️ Засварлах" : "📝 Гараар зам бүтээх"}</h2>
+              <h2 className="text-[15px] font-extrabold text-slate-900">{mode === "edit" ? "Засварлах" : "Гараар зам бүтээх"}</h2>
               <p className="text-[10px] text-slate-400 mt-0.5">Дэлгүүрүүдийг тээврийн хэрэгслээр хуваарилах · чирч дараалал өөрчлөх · ✦ Хамгийн ойр дарааллаар эрэмбэлэх</p>
             </div>
           </div>
@@ -719,13 +720,13 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
                   {s.runGroups.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
                 </select>
                 {/* BUG FIX: Add create new group button */}
-                <button
+                {/* <button
                   onClick={() => setShowNewGroup(v => !v)}
                   title="Шинэ бүлэг үүсгэх"
                   className="w-9 shrink-0 flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 transition-all text-[16px]"
                 >
                   +
-                </button>
+                </button> */}
               </div>
               {showNewGroup && (
                 <div className="mt-1.5 flex gap-1.5 items-center">
@@ -764,7 +765,7 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
               {["ALL", "DRY", "COLD"].map((f) => (
                 <button key={f} onClick={() => setFleetFilter(f as any)}
                   className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all ${fleetFilter === f ? "bg-white text-blue-600 shadow-sm border border-blue-200" : "text-slate-500 hover:text-slate-700 hover:bg-white/50"}`}>
-                  {f === "ALL" ? "🌐 All" : f === "DRY" ? "📦 Dry" : "❄️ Cold"}
+                  {f === "ALL" ? <div className="flex gap-1"><GlobalIcon /> All</div> : f === "DRY" ? <div className="flex gap-1"><BoxIcon /> Dry</div> : <div className="flex gap-1"><SnowflakeIcon /> Cold</div>}
                 </button>
               ))}
             </div>
@@ -776,7 +777,7 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
 
             <button onClick={importFile}
               className="flex items-center gap-1.5 text-[11px] font-semibold border border-emerald-300 rounded-lg px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all ml-auto">
-              📥 Файл импортлох
+              Файл импортлох
             </button>
           </div>
         </div>
@@ -784,7 +785,7 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
         {/* Import warnings */}
         {importWarnings.length > 0 && (
           <div className="shrink-0 mx-4 mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-            <div className="text-[11px] font-semibold text-amber-600 mb-1">⚠ {importWarnings.length} анхааруулга:</div>
+            <div className="text-[11px] font-semibold text-amber-600 mb-1 flex gap-1"><WarningIcon size="size-3"/> {importWarnings.length} анхааруулга:</div>
             <div className="max-h-16 overflow-y-auto space-y-0.5">{importWarnings.map((w, i) => <div key={i} className="text-[10px] text-amber-600">{w}</div>)}</div>
             <button onClick={() => setImportWarnings([])} className="text-[10px] text-amber-500 hover:underline mt-1">Хаах</button>
           </div>
@@ -794,7 +795,6 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-0">
           {!dsId && (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-              <div className="text-5xl mb-3">📂</div>
               <p className="font-semibold text-slate-600 mb-1">Эхлэхийн тулд өгөгдөл сонгоно уу</p>
               <p className="text-[11px]">Дээрх өгөгдлөөс сонгож тээврийн хэрэгсэл болон дэлгүүрүүдийг идэвхжүүлнэ үү</p>
             </div>
@@ -807,9 +807,8 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
           )}
           {dsId && !dataLoading && routes.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-              <div className="text-5xl mb-3">🛣️</div>
               <p className="font-semibold text-slate-600 mb-1">Чиглэл байхгүй байна</p>
-              <p className="text-[11px]">Доорх "+ Чиглэл нэмэх" товч эсвэл дээрх "📥 Файл импортлох" товчийг дарна уу</p>
+              <p className="text-[11px]">Доорх "+ Чиглэл нэмэх" товч эсвэл дээрх "Файл импортлох" товчийг дарна уу</p>
             </div>
           )}
           {dsId && !dataLoading && filteredRoutes.map((route, i) => (
@@ -835,7 +834,7 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
           <div className="flex items-center gap-2">
             <Btn size="sm" variant="ghost" onClick={onClose}>Цуцлах</Btn>
             <Btn size="sm" variant="primary" loading={loading} onClick={save} disabled={!dsId}>
-              💾 {mode === "edit" ? "Шинэ хувилбар хадгалах" : "Чиглэл үүсгэх"}
+              {mode === "edit" ? "Шинэ хувилбар хадгалах" : "Чиглэл үүсгэх"}
             </Btn>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { useApp, buildBadges } from "@/lib/state";
 import { fmtSec } from "@/lib/api";
 import type { Store, StopDetail, MapRoute } from "@/types/vrp";
 import "leaflet/dist/leaflet.css";
+import { SeeIcon, UnseeIcon, LocationIcon, ClockIcon, PackageIcon, GraphIcon, SnowflakeIcon, BalanceIcon, BoxIcon, StoreIcon, CheckIcon, VehicleIcon } from "./icons";
 
 const UB:  [number,number] = [47.9179, 106.9177];
 const DRY: [number,number] = [47.8847516, 106.7932466];
@@ -43,7 +44,7 @@ export default function MapPanel() {
   const [drawerDels,   setDrawerDels]   = useState<StopDetail[]>([]);
   const [drawerOpen,   setDrawerOpen]   = useState(false);
   const [routeControlCollapsed, setRouteControlCollapsed] = useState(false);
-  const [badgesVisible, setBadgesVisible] = useState(true);
+  const [badgesVisible, setBadgesVisible] = useState(false);
 
   /* stable ref so Leaflet callbacks never go stale */
   const openRef = useRef<(nodeId: string) => void>(() => {});
@@ -242,7 +243,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
       style={{ width: collapsed ? 46 : 228, maxHeight: "calc(100vh - 140px)", transition: "width 0.22s ease" }}>
 
       {/* header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 shrink-0">
+      <div className="flex items-center justify-between px-2 py-2.5 border-b border-slate-200 shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3 flex-1">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Чиглэл</span>
@@ -259,7 +260,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
           </div>
         )}
         <button onClick={() => setCollapsed(!collapsed)}
-          className="w-7 h-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-[12px] text-slate-500 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-600 shrink-0 transition-all">
+          className="w-7 h-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-[12px] text-slate-500 hover:border-red-500 hover:bg-red-50 hover:text-red-600 shrink-0 transition-all">
           {collapsed ? "☰" : "◀"}
         </button>
       </div>
@@ -298,7 +299,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
                       </div>
                       <div className="text-[9px] text-slate-500">{route.fleet} · {route.stops.length} зогсоол · {route.summary.distance_km}km</div>
                     </div>
-                    <span className="text-[13px] shrink-0">{on ? "👁" : "🔕"}</span>
+                    <span className="text-[13px] shrink-0">{on ? <SeeIcon /> : <UnseeIcon />}</span>
                   </button>
                 );
               })
@@ -331,7 +332,7 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
           {/* header */}
           <div className="shrink-0 px-4 py-4 border-b border-slate-200" style={{ background: "linear-gradient(135deg,#F8FAFC,#F0F9FF)" }}>
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: "linear-gradient(135deg,#3B82F6,#0EA5E9)" }}>🏪</div>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: "linear-gradient(135deg,#3B82F6,#0EA5E9)", color: "white" }}><StoreIcon size="size-6"/></div>
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-extrabold text-slate-900 truncate">{store.eng_name || store.store_id}</div>
                 <div className="text-[11px] text-slate-500">{store.mn_name}</div>
@@ -340,16 +341,16 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
             </div>
             <div className="flex gap-1.5 flex-wrap mb-3">
               <span className="font-mono text-[10px] bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-md font-bold">#{store.store_id}</span>
-              {store.has_dry  && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500">📦 DRY</span>}
-              {store.has_cold && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600">❄️ COLD</span>}
-              {dels.length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">✅ {dels.length} хүргэлт</span>}
+              {store.has_dry  && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 flex items-center gap-1"><BoxIcon size="size-3" /> DRY</span>}
+              {store.has_cold && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 flex items-center gap-1"><SnowflakeIcon size="size-3" /> COLD</span>}
+              {dels.length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 flex items-center gap-1"><CheckIcon size="size-3" /> {dels.length} хүргэлт</span>}
             </div>
             {/* tabs */}
             <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.65)" }}>
               {[
-                { k: "info", l: "📋 Дэлэгрэнгүй" },
-                ...(dryDels.length  > 0 ? [{ k: "dry",  l: `📦 DRY (${dryDels.length})`  }] : []),
-                ...(coldDels.length > 0 ? [{ k: "cold", l: `❄️ COLD (${coldDels.length})` }] : []),
+                { k: "info", l: "Дэлэгрэнгүй" },
+                ...(dryDels.length  > 0 ? [{ k: "dry",  l: `DRY (${dryDels.length})`  }] : []),
+                ...(coldDels.length > 0 ? [{ k: "cold", l: `COLD (${coldDels.length})` }] : []),
               ].map(t => (
                 <button key={t.k} onClick={() => setTab(t.k as any)}
                   className="flex-1 py-1.5 rounded-lg text-[11px] border-none cursor-pointer transition-all"
@@ -373,14 +374,15 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
 }
 
 function InfoTab({ store }: { store: Store }) {
+  console.log(store)
   return (
     <div className="flex flex-col gap-3">
-      <Card title="📍 Байршил">
+      <Card title={<><LocationIcon size="size-4" className="inline mr-1" />Байршил</>}>
         {store.address && <Row label="Хаяг" val={store.address} />}
         {store.detail_addr && <Row label="Дэлэгрэнгүй" val={store.detail_addr} />}
         <Row label="Lat / Lon" val={`${store.lat.toFixed(5)}, ${store.lon.toFixed(5)}`} mono />
       </Card>
-      <Card title="🕐 Цагийн хуваарь">
+      <Card title={<><ClockIcon size="size-4" className="inline mr-1" />Цагийн хуваарь</>}>
         <div className="flex items-center gap-4">
           <TimeBox label="Opens"  time={fmtSec(store.open_s)}  color="#10B981" />
           <span className="text-muted">→</span>
@@ -388,7 +390,7 @@ function InfoTab({ store }: { store: Store }) {
         </div>
       </Card>
       {(store.has_dry || store.has_cold) && (
-        <Card title="📊 Өдөр тутмын шаардлага">
+        <Card title={<><GraphIcon size="size-4" className="inline mr-1" />Захиалгын дундаж</>}>
           {store.has_dry  && <DBar label="DRY weight"  val={store.dry_kg}   unit="kg" color="#5B7CFA" max={5000} />}
           {store.has_dry  && <DBar label="DRY volume"  val={store.dry_cbm}  unit="m³" color="#5B7CFA" max={20}   />}
           {store.has_cold && <DBar label="COLD weight" val={store.cold_kg}  unit="kg" color="#0EA5E9" max={5000} />}
@@ -406,14 +408,14 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
 
   if (!dels.length) return (
     <div className="flex flex-col items-center justify-center py-10 text-slate-500 text-[12px] text-center">
-      <span className="text-3xl mb-2">📭</span>{fleet} Хүргэлт хувиарлагдаагүй байна.
+      {fleet} Хүргэлт хувиарлагдаагүй байна.
     </div>
   );
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 p-3 rounded-xl border" style={{ background: baseColor + "0F", borderColor: baseColor + "30" }}>
-        <span className="text-2xl">{fleet === "DRY" ? "📦" : "❄️"}</span>
+        <span className="text-2xl">{fleet === "DRY" ? <PackageIcon /> : <SnowflakeIcon />}</span>
         <div>
           <div className="text-[13px] font-bold" style={{ color: baseColor }}>{fleet === "DRY" ? "DRY DC" : "COLD DC"}</div>
           <div className="text-[11px] text-slate-500">Хүргэлт {fleet === "DRY" ? "13:00" : "03:00"} цагт эхлэнэ · {dels.length}-р хүргэлт{dels.length > 1 ? "ууд" : ""}</div>
@@ -433,7 +435,7 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-[3px] shrink-0" style={{ background: rc }} />
-                    <span className="text-[12px] font-bold" style={{ color: rc }}>🚚 {dd.truck_id} · Хүргэлт {dd.trip_number}</span>
+                    <span className="text-[12px] font-bold flex items-center gap-1" style={{ color: rc }}> <VehicleIcon /> {dd.truck_id} · Хүргэлт {dd.trip_number}</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: rc + "18", color: rc }}>Зогсоол #{dd.stop_order}</span>
                 </div>
@@ -442,12 +444,12 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
                   <TBox label="Явах"  time={dd.departure} color="#EF4444" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <DPill icon="⚖️" label="Weight" val={`${dd.demand_kg.toFixed(1)} kg`} />
-                  <DPill icon="📦" label="Volume" val={`${dd.demand_m3.toFixed(3)} m³`} />
+                  <DPill icon={<BalanceIcon size="size-4"/>} label="Weight" val={`${dd.demand_kg.toFixed(1)} kg`} />
+                  <DPill icon={<BoxIcon />} label="Volume" val={`${dd.demand_m3.toFixed(3)} m³`} />
                 </div>
                 {dd.delivery_day !== "Same day" && (
-                  <div className="mt-2 text-[11px] font-semibold text-amber-500 bg-amber-500/8 rounded-lg px-2 py-1">📅 {dd.delivery_day}</div>
-                )}
+                  <div className="mt-2 text-[11px] font-semibold text-amber-500 bg-amber-500/8 rounded-lg px-2 py-1">{dd.delivery_day}</div>
+                )} 
               </div>
             </div>
           );
@@ -458,7 +460,7 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
 }
 
 /* ── micro components ────────────────────────────────── */
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
       <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-[0.09em] mb-3">{title}</div>
@@ -504,7 +506,7 @@ function DBar({ label, val, unit, color, max }: { label: string; val: number; un
     </div>
   );
 }
-function DPill({ icon, label, val }: { icon: string; label: string; val: string }) {
+function DPill({ icon, label, val }: { icon: React.ReactNode; label: string; val: string }) {
   return (
     <div className="bg-slate-50 rounded-lg p-2 flex items-center gap-2">
       <span className="text-[13px]">{icon}</span>
@@ -519,10 +521,10 @@ function DPill({ icon, label, val }: { icon: string; label: string; val: string 
 /* ── store marker HTML ───────────────────────────────── */
 function simpleStoreIcon(st: Store, isActive: boolean) {
   // default = small neutral
-  let color = "#94A3B8"; // gray
+  let color = "#BD4AFF"; // gray
 
   // active route store = green
-  if (isActive) color = "#BD4AFF";
+  if (isActive) color = "#30C21F";
 
   return {
     html: `<div style="
@@ -570,7 +572,7 @@ function smartBadgeIcon(badges: Array<{ color: string; label: string }>) {
         </div>
         <div style="
           width:6px;height:6px;border-radius:50%;
-          background:#22C55E;
+          background:#BD4AFF;
           border:2px solid #fff;
         "></div>
       </div>

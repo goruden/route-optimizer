@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { useApp } from "@/lib/state";
+import { LocationIcon } from "./icons";
 
 export function StopsPanel() {
   const { s } = useApp();
@@ -19,8 +20,8 @@ export function StopsPanel() {
 
   if (!stopDetails.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-      <span className="text-5xl">📍</span>
-      <p className="font-semibold text-slate-900">Зогсоол байхгүй байна</p>
+      <span className="text-orange-600"><LocationIcon size="size-10" /></span>
+      <p className="font-semibold text-orange-500">Зогсоол байхгүй байна</p>
       <p className="text-[12px]">Шинээр тооцолол хийнэ үү</p>
     </div>
   );
@@ -29,12 +30,13 @@ export function StopsPanel() {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="shrink-0 flex items-center gap-2.5 px-4 py-2.5 bg-white border-b border-slate-200">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search stops…"
-          className="flex-1 max-w-65 text-[12px] border border-slate-200 rounded-xl px-3 py-1.5 bg-white outline-none focus:border-blue-500" />
+          className="flex-1 max-w-65 text-[12px] border border-slate-200 rounded-xl px-3 py-1.5 bg-white outline-none focus:border-red-500" />
         <div className="flex gap-1.5">
           {["ALL","DRY","COLD"].map(f => (
             <button key={f} onClick={() => setFleetF(f)}
-              className="px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all"
-              style={{ borderColor: fleetF===f?"rgb(91 124 250)":"rgb(226 232 240)", background: fleetF===f?"rgba(91,124,250,0.08)":"#fff", color: fleetF===f?"rgb(91 124 250)":"rgb(123 130 160)" }}>
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all ${fleetF === f ? "bg-red-50 border-red-600 text-red-600" : "border-slate-200 bg-white text-slate-600"}`}
+              // style={{ borderColor: fleetF===f?"rgb(91 124 250)":"rgb(226 232 240)", background: fleetF===f?"rgba(91,124,250,0.08)":"#fff", color: fleetF===f?"rgb(91 124 250)":"rgb(123 130 160)" }}
+              >
               {f}
             </button>
           ))}
@@ -57,7 +59,7 @@ export function StopsPanel() {
             {filtered.map((r, i) => (
               <tr key={i} className={`border-b border-slate-200 hover:bg-blue-500/4 transition-colors ${i%2===0?"bg-white":"bg-slate-50"}`}>
                 <td className="px-3 py-2">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.fleet==="DRY"?"bg-blue-200 text-blue-600":"bg-cyan-100 text-cyan-600"}`}>{r.fleet}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.fleet==="DRY"?"bg-orange-200 text-orange-600":"bg-sky-100 text-sky-600"}`}>{r.fleet}</span>
                 </td>
                 <td className="px-3 py-2 font-mono text-[11px] font-semibold">{r.truck_id}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">T{r.trip_number}</td>

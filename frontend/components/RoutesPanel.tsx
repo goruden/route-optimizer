@@ -4,6 +4,7 @@ import { useApp } from "@/lib/state";
 import { RouteBuilderModal, routesFromSolverData } from "./AddPanel";
 import { showToast } from "./ui";
 import type { RouteSummary } from "@/types/vrp";
+import { EditIcon, VehicleIcon } from "./icons";
 
 function utilColor(p: number) {
   return p >= 90 ? "rgb(239 68 68)" : p >= 65 ? "rgb(245 158 11)" : "rgb(16 185 129)";
@@ -55,8 +56,8 @@ export function RoutesPanel() {
 
   if (!rows.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-      <span className="text-5xl">🚚</span>
-      <p className="font-semibold text-slate-900">Чиглэл байхгүй байна</p>
+      <span className="text-orange-600"><VehicleIcon size="size-10" /></span>
+      <p className="font-semibold text-orange-500">Чиглэл байхгүй байна</p>
       <p className="text-[12px]">Шинээр тооцоолол хийнэ үү</p>
     </div>
   );
@@ -140,7 +141,7 @@ export function RoutesPanel() {
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border-[1.5px] border-violet-300 text-violet-500 bg-violet-500/6 hover:bg-violet-500/12 transition-all"
             >
-              ✏️ Засах
+              <EditIcon size="size-4"/> Засах
             </button>
           ) : (
             <span className="text-[10px] text-slate-400 italic">

@@ -14,8 +14,8 @@ export function Btn({variant="secondary",loading,size="md",className="",children
   const base="inline-flex items-center justify-center gap-2 font-semibold rounded-xl border transition-all duration-150 cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed";
   const sz={sm:"px-3 py-1.5 text-[11px]",md:"px-4 py-2 text-[12px]",lg:"px-5 py-3 text-[14px] font-bold"}[size];
   const v={
-    primary:"bg-blue-500 border-blue-500 text-white hover:bg-blue-600 shadow-[0_4px_14px_rgba(59,130,246,0.3)]",
-    secondary:"bg-white border-slate-200 text-slate-900 hover:border-blue-500 hover:text-blue-500",
+    primary:"bg-red-500 border-red-500 text-white hover:bg-red-600 shadow-[0_4px_14px_rgba(59,130,246,0.3)]",
+    secondary:"bg-white border-slate-200 text-slate-900 hover:border-red-500 hover:text-red-500",
     ghost:"bg-transparent border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-50",
     danger:"bg-white border-red-300 text-red-500 hover:bg-red-50",
     success:"bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600 shadow-[0_4px_14px_rgba(16,185,129,0.3)]",
@@ -34,7 +34,7 @@ export function Input({label,className="",id,...rest}:InputProps){
   return(
     <div className="flex flex-col gap-1">
       {label&&<label htmlFor={id} className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</label>}
-      <input id={id} className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/12 placeholder:text-slate-300 transition-all ${className}`} {...rest}/>
+      <input id={id} className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/12 placeholder:text-slate-300 transition-all ${className}`} {...rest}/>
     </div>
   );
 }
@@ -45,7 +45,7 @@ export function Sel({label,options,className="",id,...rest}:SelProps){
   return(
     <div className="flex flex-col gap-1">
       {label&&<label htmlFor={id} className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</label>}
-      <select id={id} className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-900 outline-none focus:border-blue-500 transition-all ${className}`} {...rest}>
+      <select id={id} className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-900 outline-none focus:border-red-500 transition-all ${className}`} {...rest}>
         {options.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
     </div>
@@ -59,7 +59,7 @@ export function NumInput({label,value,min,max,step=1,onChange,className=""}:NumP
     <div className="flex flex-col gap-1">
       {label&&<span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>}
       <input type="number" value={value} min={min} max={max} step={step}
-        className={`rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-mono text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/12 transition-all ${className}`}
+        className={`rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-mono text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/12 transition-all ${className}`}
         onChange={e=>onChange(Number(e.target.value))}/>
     </div>
   );
@@ -568,7 +568,7 @@ export function DatasetCreationModal({
 /* ── Upload zone ─────────────────────────────────────── */
 export function UploadZone({label,icon,accept,onFile,fileName}:{label:string;icon:string;accept:string;onFile:(f:File)=>void;fileName?:string;}){
   return(
-    <label className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center cursor-pointer relative transition-all duration-150 ${fileName?"border-green-500/50 bg-green-500/4":"border-slate-300 bg-white hover:border-blue-500 hover:bg-blue-500/4"}`}>
+    <label className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center cursor-pointer relative transition-all duration-150 ${fileName?"border-green-500/50 bg-green-500/4":"border-slate-300 bg-white hover:border-red-500 hover:bg-red-500/4"}`}>
       <input type="file" accept={accept} className="absolute inset-0 opacity-0 cursor-pointer" onChange={e=>{const f=e.target.files?.[0];if(f)onFile(f);}}/>
       <span className="text-lg mb-1">{icon}</span>
       {fileName
@@ -592,9 +592,9 @@ export function Pill({label,color}:{label:string;color?:string;}){
 /* ── Section heading ─────────────────────────────────── */
 export function SectionLabel({label,action}:{label:string;action?:ReactNode;}){
   return(
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+    <div className="flex items-center gap-2 mb-2">
       {action}
+      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
     </div>
   );
 }
