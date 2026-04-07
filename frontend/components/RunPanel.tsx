@@ -154,11 +154,12 @@ export function RunPanel(){
             <SolverTerminal
               running={s.running}
               solverTime={time}
+              maxTrips={trips}   // ← add this
               startedAt={solverStartedAt}
               jobId={s.activeJobId}
             />
           </div>
-        )}
+        )} 
 
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
           {/* Dataset selection */}
@@ -250,7 +251,7 @@ export function RunPanel(){
                     <div className="text-[9px] text-slate-400">Хүргэлт + Агуулах</div>
                   </div>
                   <div className="relative">
-                    <input type="number" value={time} min={1} max={600}  //! add disabled
+                    <input type="number" value={time} min={1} max={600} //! add disabled
                       onChange={e => setTime(Math.max(1, Math.min(600, Number(e.target.value))))}
                       className="w-14 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-red-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 font-medium pointer-events-none">s</span>
@@ -260,7 +261,7 @@ export function RunPanel(){
                   {[60, 300].map(v => (
                     <button key={v} onClick={() => setTime(v)}
                       className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${time===v?"border-red-500 bg-red-50 text-red-600":"border-slate-200 text-slate-400 hover:bg-slate-50"}`}>
-                      {v === 60 ? 'Хурдан' : 'Удаан'}
+                      {v === 60 ? 'Хурдан' : 'Нарийвчилсан'}
                     </button>
                   ))}
                 </div>

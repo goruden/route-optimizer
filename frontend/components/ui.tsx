@@ -1,6 +1,3 @@
-/* ─────────────────────────────────────────────────────
-   Pure-Tailwind UI primitives — no external UI library
-   ───────────────────────────────────────────────────── */
 "use client";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { WS_BASE } from "@/lib/api";
@@ -127,7 +124,7 @@ export function Confirm({onConfirm,children,message="Итгэлтэй байна
 
 /* ── Toast ───────────────────────────────────────────── */
 type ToastType="success"|"error"|"info"|"loading";
-const toasts:{id:number;msg:string;type:ToastType;progress?:number}[]=[];
+const toasts:{id:number;msg:string;type:ToastType}[]=[];
 let toastSubs:Array<()=>void>=[];
 let nextId=0;
 export function showToast(msg:string,type:ToastType="success"){
@@ -145,7 +142,6 @@ export function dismissToast(id:number){
 }
 export function Toaster(){
   const[,rerender]=useState(0);
-  useRef(null);
   toastSubs=[()=>rerender(n=>n+1)];
   const styles:{[k in ToastType]:{bg:string;icon:string}}={
     success:{bg:"bg-emerald-500",icon:"✓"},
@@ -225,7 +221,6 @@ export function StepProgress({steps}:{steps:Step[]}){
           : "#CBD5E1";
         return(
           <div key={step.id} className="flex gap-3">
-            {/* Line + dot */}
             <div className="flex flex-col items-center">
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 transition-all duration-300"
@@ -243,7 +238,6 @@ export function StepProgress({steps}:{steps:Step[]}){
                 />
               )}
             </div>
-            {/* Content */}
             <div className={`flex-1 pb-3 ${isLast?"":"pb-1"}`}>
               <div
                 className="text-[12px] font-semibold transition-colors"
@@ -262,123 +256,225 @@ export function StepProgress({steps}:{steps:Step[]}){
   );
 }
 
-// ── Log line parser ──────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════
+   SolverTerminal — fixed version
+   ═══════════════════════════════════════════════════════ */
+
+// ── Types ────────────────────────────────────────────────────────────────────
 interface ParsedLine {
-  level: "INFO" | "WARNING" | "ERROR" | "DEBUG" | "OTHER";
-  source: string;
+  level: "INFO"|"WARNING"|"ERROR"|"DEBUG"|"OTHER";
   body: string;
-  raw: string;
 }
- 
-function parseLine(raw: string): ParsedLine {
-  // Format:  "INFO     vrp_solver — [DRY] Trip 1/2 …"
-  const m = raw.match(/^(INFO|WARNING|ERROR|DEBUG)\s+(\S+)\s+—\s+(.+)$/);
-  if (m) {
-    return { level: m[1] as ParsedLine["level"], source: m[2], body: m[3], raw };
+
+type PhaseId = "setup"|"dry"|"cold"|"osrm"|"save";
+type PhaseStatus = "waiting"|"active"|"done";
+
+// ── Phase definitions (log-driven) ───────────────────────────────────────────
+const SOLVER_PHASES: { id: PhaseId; icon: string; label: string; triggers: RegExp[] }[] = [
+  { id:"setup", icon:"⚡", label:"Setup",     triggers:[/starting/i, /Loading distance/i] },
+  { id:"dry",   icon:"📦", label:"DRY solve", triggers:[/\[DRY\]/, /Starting OR-Tools/i] },
+  { id:"cold",  icon:"❄️", label:"COLD solve",triggers:[/\[COLD\]/] },
+  { id:"osrm",  icon:"🗺", label:"OSRM",      triggers:[/osrm/i, /route_km/i] },
+  { id:"save",  icon:"💾", label:"Saving",  triggers:[/[Ss]av(?:ing|ed)/, /Done\./] },
+];
+const PHASE_ORDER: PhaseId[] = ["setup","dry","cold","osrm","save"];
+
+const PHASE_STATUS_MSG: Record<PhaseId, string> = {
+  setup: "Reading data & preparing matrix…",
+  dry:   "DRY run — assigning trucks to stores…",
+  cold:  "COLD run — night delivery optimization…",
+  osrm:  "Calculating real road distances via OSRM…",
+  save:  "Finalizing & saving results…",
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const LOG_LEVEL_COLOR: Record<ParsedLine["level"], string> = {
+  INFO:"#86efac", WARNING:"#fde68a", ERROR:"#fca5a5", DEBUG:"#94a3b8", OTHER:"#cbd5e1",
+};
+const LOG_LEVEL_LABEL: Record<ParsedLine["level"], string> = {
+  INFO:"INFO", WARNING:"WARN", ERROR:"ERR ", DEBUG:"DBG ", OTHER:"    ",
+};
+
+function parseLogLine(raw: string): ParsedLine {
+  const m = raw.match(/^(INFO|WARNING|ERROR|DEBUG)\s+\S+\s+—\s+(.+)$/);
+  if (m) return { level: m[1] as ParsedLine["level"], body: m[2] };
+  return { level:"OTHER", body: raw };
+}
+
+function detectLogPhase(body: string): PhaseId | null {
+  for (const p of SOLVER_PHASES) {
+    if (p.triggers.some(re => re.test(body))) return p.id;
   }
-  return { level: "OTHER", source: "", body: raw, raw };
+  return null;
 }
- 
-const LEVEL_COLOR: Record<ParsedLine["level"], string> = {
-  INFO:    "#86efac",  // green-300
-  WARNING: "#fde68a",  // amber-200
-  ERROR:   "#fca5a5",  // red-300
-  DEBUG:   "#94a3b8",  // slate-400
-  OTHER:   "#cbd5e1",  // slate-300
-};
- 
-const LEVEL_LABEL: Record<ParsedLine["level"], string> = {
-  INFO:    "INFO ",
-  WARNING: "WARN ",
-  ERROR:   "ERR  ",
-  DEBUG:   "DBG  ",
-  OTHER:   "     ",
-};
- 
-// Highlight keywords inside the body text
-function highlightBody(body: string): React.ReactNode {
+
+function highlightLogBody(body: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  // Color fleet tags  [DRY] / [COLD]
-  const re = /(\[DRY\]|\[COLD\]|\d+(?:\.\d+)?s|Trip\s+\d+\/\d+|\d{2}:\d{2})/g;
+  const re = /(\[DRY\]|\[COLD\]|Trip\s+\d+\/\d+|\d+(?:\.\d+)?s\b|\d{2}:\d{2})/g;
   let last = 0, m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
     if (m.index > last) parts.push(body.slice(last, m.index));
     const tok = m[0];
-    const c =
-      tok.startsWith("[DRY]")  ? "#93c5fd"  :  // blue-300
-      tok.startsWith("[COLD]") ? "#67e8f9"  :  // cyan-300
-      tok.includes("Trip")     ? "#c4b5fd"  :  // violet-300
-      tok.match(/\d{2}:\d{2}/) ? "#86efac"  :  // green-300
-      "#fdba74";                                  // orange-300
-    parts.push(<span key={m.index} style={{ color: c, fontWeight: 700 }}>{tok}</span>);
+    const c = tok.startsWith("[DRY]")   ? "#93c5fd"
+             : tok.startsWith("[COLD]") ? "#67e8f9"
+             : tok.includes("Trip")     ? "#c4b5fd"
+             : tok.match(/\d{2}:\d{2}/)? "#86efac"
+             : "#fdba74";
+    parts.push(<span key={m.index} style={{color:c, fontWeight:700}}>{tok}</span>);
     last = m.index + tok.length;
   }
   if (last < body.length) parts.push(body.slice(last));
   return parts;
 }
 
-/* ── SolverCountdown ─────────────────────────────────── */
+// Wall-clock estimate: OR-Tools budget runs once per trip × per fleet (DRY+COLD) + overhead
+function estimateWallTime(solverTimeBudget: number, maxTrips: number): number {
+  return solverTimeBudget * maxTrips * 2 + 10; // 2 fleets + 10s overhead
+}
+
+// ── Sub-components ───────────────────────────────────────────────────────────
+function SolverPhaseBar({ statuses }: { statuses: Record<PhaseId, PhaseStatus> }) {
+  return (
+    <div style={{
+      display:"flex", gap:4, padding:"6px 12px",
+      borderBottom:"1px solid #21262d", background:"#0d1117",
+    }}>
+      {SOLVER_PHASES.map(p => {
+        const s = statuses[p.id];
+        const done   = s === "done";
+        const active = s === "active";
+        const nameColor = done ? "#22c55e" : active ? "#3b82f6" : "#374151";
+        const lineColor = done ? "#22c55e" : active ? "#3b82f6" : "#21262d";
+        return (
+          <div key={p.id} style={{flex:1, display:"flex", alignItems:"center", gap:3, opacity: done||active ? 1 : 0.4}}>
+            <span style={{fontSize:10}}>{p.icon}</span>
+            <div style={{flex:1, display:"flex", flexDirection:"column", gap:2, minWidth:0}}>
+              <span style={{fontSize:8, fontWeight:700, color:nameColor, whiteSpace:"nowrap", overflow:"hidden"}}>
+                {p.label}
+              </span>
+              <div style={{height:2, borderRadius:99, background:lineColor}}/>
+            </div>
+            {done   && <span style={{fontSize:8, color:"#22c55e"}}>✓</span>}
+            {active && <span style={{
+              display:"inline-block", width:6, height:6, borderRadius:"50%",
+              background:"#3b82f6", flexShrink:0,
+              animation:"vrpPulse 1.4s infinite",
+            }}/>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SolverLogLine({ line }: { line: ParsedLine }) {
+  return (
+    <div style={{display:"flex", gap:8, fontSize:11, lineHeight:"18px"}}>
+      <span style={{
+        color: LOG_LEVEL_COLOR[line.level], fontSize:9, fontWeight:700,
+        width:36, textAlign:"right", flexShrink:0, fontVariantNumeric:"tabular-nums",
+      }}>
+        {LOG_LEVEL_LABEL[line.level]}
+      </span>
+      <span style={{color:"#c9d1d9", wordBreak:"break-all", flex:1}}>
+        {highlightLogBody(line.body)}
+      </span>
+    </div>
+  );
+}
+
+// ── Main export ──────────────────────────────────────────────────────────────
 export function SolverTerminal({
   running,
   solverTime,
+  maxTrips = 2,
   startedAt,
   jobId,
 }: {
   running: boolean;
   solverTime: number;
+  maxTrips?: number;        // pass `trips` from RunPanel for accurate estimate
   startedAt: number | null;
   jobId: string | null;
 }) {
-  const [lines,   setLines]   = useState<ParsedLine[]>([]);
-  const [elapsed, setElapsed] = useState(0);
-  const [wsState, setWsState] = useState<"connecting" | "open" | "closed">("connecting");
+  const [lines,         setLines]         = useState<ParsedLine[]>([]);
+  const [elapsed,       setElapsed]       = useState(0);
+  const [wsState,       setWsState]       = useState<"connecting"|"open"|"closed">("connecting");
+  const [currentPhase,  setCurrentPhase]  = useState<PhaseId>("setup");
+  const [phaseStatuses, setPhaseStatuses] = useState<Record<PhaseId, PhaseStatus>>({
+    setup:"active", dry:"waiting", cold:"waiting", osrm:"waiting", save:"waiting",
+  });
   const bottomRef = useRef<HTMLDivElement>(null);
   const wsRef     = useRef<WebSocket | null>(null);
- 
-  // ── WebSocket lifecycle ────────────────────────────────────
+
+  const estimatedTotal = estimateWallTime(solverTime, maxTrips);
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!running || !jobId) {
-      setLines([]);
-      setElapsed(0);
+      setLines([]); 
+      setElapsed(0); 
       setWsState("connecting");
+      setCurrentPhase("setup");
+      // Reset all phases to waiting for new run
+      setPhaseStatuses({ 
+        setup: "active", 
+        dry: "waiting", 
+        cold: "waiting", 
+        osrm: "waiting", 
+        save: "waiting" 
+      });
       return;
     }
- 
-    const url = `${WS_BASE}/ws/logs/${jobId}`;
-    const ws  = new WebSocket(url);
+    const ws = new WebSocket(`${WS_BASE}/ws/logs/${jobId}`);
     wsRef.current = ws;
     setWsState("connecting");
- 
-    ws.onopen = () => {
-      setWsState("open");
-    };
- 
+    ws.onopen  = () => setWsState("open");
+    ws.onerror = () => setWsState("closed");
+    ws.onclose = () => setWsState("closed");
     ws.onmessage = (e: MessageEvent<string>) => {
       const msg = e.data;
-      if (msg === "__PING__") return;          // keep-alive, ignore
-      if (msg === "__DONE__") {
-        setWsState("closed");
-        ws.close();
-        return;
+      if (msg === "__PING__") return;
+      if (msg === "__DONE__") { setWsState("closed"); ws.close(); return; }
+
+      const parsed = parseLogLine(msg);
+
+      // Advance phase based on log content (never go backwards)
+      const detected = detectLogPhase(parsed.body);
+      if (detected) {
+        setCurrentPhase(prev => {
+          const prevIdx = PHASE_ORDER.indexOf(prev);
+          const newIdx  = PHASE_ORDER.indexOf(detected);
+          if (newIdx <= prevIdx) return prev;
+          setPhaseStatuses(ps => {
+            const next = { ...ps };
+            for (let i = 0; i < newIdx; i++) next[PHASE_ORDER[i]] = "done";
+            next[detected] = "active";
+            return next;
+          });
+          return detected;
+        });
       }
-      setLines(prev => [...prev.slice(-150), parseLine(msg)]);
+
+      setLines(prev => [...prev.slice(-200), parsed]);
     };
- 
-    ws.onerror = () => {
-      setWsState("closed");
-    };
- 
-    ws.onclose = () => {
-      setWsState("closed");
-    };
- 
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
+    return () => { ws.close(); wsRef.current = null; };
   }, [running, jobId]);
- 
-  // ── Elapsed timer ──────────────────────────────────────────
+
+  // Mark all phases done only when solver completes successfully (not on connection close)
+  useEffect(() => {
+    if (wsState === "closed" && lines.length > 0) {
+      // Check if the last log indicates completion
+      const lastLog = lines[lines.length - 1];
+      const isCompleted = lastLog?.body.includes("Done.") || lastLog?.body.includes("completed");
+      
+      if (isCompleted) {
+        setPhaseStatuses({ setup:"done", dry:"done", cold:"done", osrm:"done", save:"done" });
+      }
+    }
+  }, [wsState, lines]);
+
+  // ── Elapsed timer ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!running || !startedAt) { setElapsed(0); return; }
     const id = setInterval(() => {
@@ -386,148 +482,114 @@ export function SolverTerminal({
     }, 500);
     return () => clearInterval(id);
   }, [running, startedAt]);
- 
-  // ── Auto-scroll ────────────────────────────────────────────
+
+  // ── Auto-scroll ────────────────────────────────────────────────────────────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [lines]);
- 
+
   if (!running || !startedAt) return null;
- 
-  const progress   = Math.min(100, (elapsed / solverTime) * 100);
-  const remaining  = Math.max(0, solverTime - elapsed);
-  const stateColor = wsState === "open" ? "#22c55e" : wsState === "connecting" ? "#f59e0b" : "#94a3b8";
-  const stateLabel = wsState === "open" ? "LIVE" : wsState === "connecting" ? "CONNECTING" : "DONE";
- 
+
+  // Cap at 95% while still running; snap to 100% when WS closes
+  const rawPct = (elapsed / estimatedTotal) * 100;
+  const pct    = wsState === "closed" ? 100 : Math.min(95, rawPct);
+  const isLive = wsState === "open";
+
+  const stateColor = isLive ? "#22c55e" : wsState === "connecting" ? "#f59e0b" : "#6b7280";
+  const stateLabel = isLive ? "LIVE"    : wsState === "connecting" ? "CONN"    : "DONE";
+
   return (
-    <div className="mx-3 mb-3 rounded-xl overflow-hidden border border-slate-700 shadow-xl"
-      style={{ background: "#0d1117", fontFamily: "'JetBrains Mono', 'Fira Mono', monospace" }}>
- 
-      {/* ── Header bar ───────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-slate-700"
-        style={{ background: "#161b22" }}>
- 
-        {/* Traffic-light dots */}
-        {/* <div className="flex gap-1.5 shrink-0">
-          <div className="w-3 h-3 rounded-full" style={{ background: "#ff5f57" }} />
-          <div className="w-3 h-3 rounded-full" style={{ background: "#febc2e" }} />
-          <div className="w-3 h-3 rounded-full" style={{ background: "#28c840" }} />
-        </div> */}
- 
-        {/* Title */}
-        {/* <span className="text-[11px] text-slate-400 flex-1 truncate">
-          vrp-solver
-          {jobId && <span className="text-slate-600 ml-2">#{jobId.slice(0, 8)}</span>}
-        </span> */}
- 
-        {/* WS state badge */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: stateColor }} />
-          <span className="text-[9px] font-bold tracking-widest" style={{ color: stateColor }}>
-            {stateLabel}
-          </span>
-        </div>
- 
-        {/* Progress + timer */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-20 h-1 rounded-full overflow-hidden" style={{ background: "#30363d" }}>
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${progress}%`,
-                background: `linear-gradient(90deg, #22c55e, #3b82f6 ${progress}%)`,
-              }}
-            />
-          </div>
-          <span className="text-[10px] text-slate-500 w-14 text-right tabular-nums">
-            {elapsed}s / {solverTime}s
-          </span>
-        </div>
-      </div>
- 
-      {/* ── Phase indicators ──────────────────────────────────── */}
-      <PhaseBar elapsed={elapsed} solverTime={solverTime} />
- 
-      {/* ── Log body ──────────────────────────────────────────── */}
-      <div className="overflow-y-auto px-3 py-2 flex flex-col gap-0.5" style={{ height: 168 }}>
-        {lines.length === 0 ? (
-          <div className="flex items-center gap-2 mt-6">
-            <span className="text-slate-600 text-[12px] animate-pulse">▋</span>
-            <span className="text-slate-500 text-[11px]">
-              {wsState === "connecting" ? "Connecting to solver …" : "Waiting for logs …"}
+    <>
+      <style>{`
+        @keyframes vrpPulse   { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        @keyframes vrpBlink   { 0%,100%{opacity:1} 50%{opacity:0}   }
+        @keyframes vrpBounce  { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-3px)} }
+        @keyframes vrpShimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(250%)} }
+      `}</style>
+
+      <div style={{
+        margin:"0 12px 12px", borderRadius:12, overflow:"hidden",
+        border:"1px solid #30363d",
+        fontFamily:"'JetBrains Mono','Fira Mono',monospace",
+        background:"#0d1117",
+      }}>
+
+        {/* ── Header ───────────────────────────────────────────────────────── */}
+        <div style={{background:"#161b22", borderBottom:"1px solid #30363d", padding:"10px 14px", display:"flex", flexDirection:"column", gap:8}}>
+
+
+          {/* Row 1: status dot + timer */}
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+            <div style={{display:"flex", alignItems:"center", gap:6}}>
+              <div style={{
+                width:8, height:8, borderRadius:"50%", background:stateColor,
+                animation: isLive ? "vrpPulse 1.5s infinite" : "none",
+              }}/>
+              {isLive && (
+                <div style={{display:"flex", alignItems:"center", gap:6}}>
+                  <img 
+                    src="/route-optimizer/working.gif" 
+                    alt="Working" 
+                    style={{height:40}}
+                  />
+                </div>
+              )}
+            </div>
+            <span style={{fontSize:11, color:"#6b7280", fontVariantNumeric:"tabular-nums"}}>
+              ⏱ {elapsed}s / ~{estimatedTotal}s
             </span>
           </div>
-        ) : (
-          lines.map((ln, i) => (
-            <LogLine key={i} line={ln} />
-          ))
-        )}
-        {/* Blinking cursor at the end */}
-        {lines.length > 0 && wsState === "open" && (
-          <span className="text-slate-600 text-[12px] animate-pulse mt-0.5">▋</span>
-        )}
-        <div ref={bottomRef} />
-      </div>
-    </div>
-  );
-}
- 
-// ── Sub-components ───────────────────────────────────────────────
- 
-function LogLine({ line }: { line: ParsedLine }) {
-  const color = LEVEL_COLOR[line.level];
-  return (
-    <div className="flex items-baseline gap-2 text-[11px] leading-5">
-      <span className="shrink-0 text-[9px] font-bold w-10 text-right tabular-nums" style={{ color }}>
-        {LEVEL_LABEL[line.level]}
-      </span>
-      <span className="flex-1 text-slate-300 break-all">
-        {highlightBody(line.body)}
-      </span>
-    </div>
-  );
-}
- 
-function PhaseBar({ elapsed, solverTime }: { elapsed: number; solverTime: number }) {
-  // Rough phase heuristics based on elapsed vs budget
-  const phases = [
-    { label: "Setup",    icon: "⚡", pct: 0,    end: 5  },
-    { label: "DRY solve",icon: "📦", pct: 5,    end: 45 },
-    { label: "COLD solve",icon:"❄️", pct: 45,   end: 85 },
-    { label: "OSRM",    icon: "🗺", pct: 85,   end: 95 },
-    { label: "Хадгалах",    icon: "💾", pct: 95,   end: 100 },
-  ];
-  const progress = Math.min(100, (elapsed / Math.max(1, solverTime)) * 100);
- 
-  return (
-    <div className="flex px-3 py-1.5 gap-1 border-b border-slate-800" style={{ background: "#0d1117" }}>
-      {phases.map((p, i) => {
-        const done    = progress > p.end;
-        const active  = progress >= p.pct && progress <= p.end;
-        const opacity = done ? 1 : active ? 1 : 0.35;
-        return (
-          <div key={i} className="flex items-center gap-1 flex-1 min-w-0">
-            <span className="text-[10px]" style={{ opacity }}>{p.icon}</span>
-            <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-              <span className="text-[8px] truncate font-semibold"
-                style={{ color: done ? "#22c55e" : active ? "#3b82f6" : "#475569", opacity }}>
-                {p.label}
-              </span>
-              <div className="h-0.5 rounded-full" style={{
-                background: done ? "#22c55e" : active ? "#3b82f6" : "#1e293b",
-              }} />
-            </div>
-            {done && <span className="text-[9px] text-green-500" style={{ opacity }}>✓</span>}
-            {active && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0" />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
- 
 
-/* ── DatasetCreationProgress ─────────────────────────── */
+          {/* Row 2: progress bar with shimmer */}
+          <div style={{height:3, background:"#21262d", borderRadius:99, overflow:"hidden", position:"relative"}}>
+            <div style={{
+              position:"absolute", inset:0, width:`${pct}%`,
+              background:"linear-gradient(90deg,#22c55e,#3b82f6)",
+              borderRadius:99, transition:"width 0.7s ease-out",
+            }}/>
+            {isLive && pct > 0 && pct < 95 && (
+              <div style={{position:"absolute",top:0,left:0,height:"100%",width:`${pct}%`,overflow:"hidden",borderRadius:99}}>
+                <div style={{
+                  position:"absolute",top:0,height:"100%",width:"40%",
+                  background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.45),transparent)",
+                  animation:"vrpShimmer 1.8s infinite",
+                }}/>
+              </div>
+            )}
+          </div>
+
+          {/* Row 3: status message */}
+          <div style={{fontSize:11, color:"#6b7280"}}>
+            {PHASE_STATUS_MSG[currentPhase]}
+          </div>
+        </div>
+
+        {/* ── Phase bar ────────────────────────────────────────────────────── */}
+        <SolverPhaseBar statuses={phaseStatuses} />
+
+        {/* ── Log body ──────────────────────────────────────────────────────── */}
+        <div style={{height:168, overflowY:"auto", padding:"8px 14px", display:"flex", flexDirection:"column", gap:2}}>
+          {lines.length === 0 ? (
+            <div style={{display:"flex", alignItems:"center", gap:8, marginTop:24}}>
+              <span style={{color:"#374151", fontSize:13, animation:"vrpBlink 1s step-end infinite"}}>▋</span>
+              <span style={{color:"#6b7280", fontSize:11}}>
+                {wsState === "connecting" ? "Connecting to solver…" : "Waiting for logs…"}
+              </span>
+            </div>
+          ) : (
+            lines.map((ln, i) => <SolverLogLine key={i} line={ln}/>)
+          )}
+          {lines.length > 0 && isLive && (
+            <span style={{color:"#374151", fontSize:13, animation:"vrpBlink 1s step-end infinite", marginTop:2}}>▋</span>
+          )}
+          <div ref={bottomRef}/>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── DatasetCreationModal ────────────────────────────── */
 export function DatasetCreationModal({
   open, steps, title="Өгөгдөл үүсгэж байна"
 }:{open:boolean;steps:Step[];title?:string}){
@@ -565,7 +627,7 @@ export function DatasetCreationModal({
   );
 }
 
-/* ── Upload zone ─────────────────────────────────────── */
+/* ── UploadZone ──────────────────────────────────────── */
 export function UploadZone({label,icon,accept,onFile,fileName}:{label:string;icon:string;accept:string;onFile:(f:File)=>void;fileName?:string;}){
   return(
     <label className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center cursor-pointer relative transition-all duration-150 ${fileName?"border-green-500/50 bg-green-500/4":"border-slate-300 bg-white hover:border-red-500 hover:bg-red-500/4"}`}>
@@ -578,7 +640,7 @@ export function UploadZone({label,icon,accept,onFile,fileName}:{label:string;ico
   );
 }
 
-/* ── Pill / chip ─────────────────────────────────────── */
+/* ── Pill ────────────────────────────────────────────── */
 export function Pill({label,color}:{label:string;color?:string;}){
   const c=color??"#3B82F6";
   return(
@@ -589,7 +651,7 @@ export function Pill({label,color}:{label:string;color?:string;}){
   );
 }
 
-/* ── Section heading ─────────────────────────────────── */
+/* ── SectionLabel ────────────────────────────────────── */
 export function SectionLabel({label,action}:{label:string;action?:ReactNode;}){
   return(
     <div className="flex items-center gap-2 mb-2">
@@ -599,7 +661,7 @@ export function SectionLabel({label,action}:{label:string;action?:ReactNode;}){
   );
 }
 
-/* CSS for shimmer */
+/* CSS for shimmer + slide-in */
 if(typeof document!=="undefined"){
   const style=document.createElement("style");
   style.textContent=`
