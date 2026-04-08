@@ -350,7 +350,7 @@ export function Shell() {
             return (
               <button key={tab.key}
                 onClick={() => d({ t: "SET_MAIN", v: tab.key })}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold border-b-[2.5px] transition-all duration-150 ${mainTab === tab.key ? "border-blue-500 text-blue-500" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold border-b-[2.5px] transition-all duration-150 ${mainTab === tab.key ? "border-red-500 text-red-500" : "border-transparent text-slate-500 hover:text-slate-900"}`}
               >
                 {tab.icon} {tab.label}
                 {cnt != null && cnt > 0 && (

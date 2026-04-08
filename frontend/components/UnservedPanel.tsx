@@ -75,8 +75,9 @@ export function UnservedPanel() {
         <div className="flex gap-1.5">
           {["ALL","DRY","COLD"].map(f => (
             <button key={f} onClick={() => setFleetF(f)}
-              className="px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all"
-              style={{ borderColor: fleetF===f?"rgb(91 124 250)":"rgb(226 232 240)", background: fleetF===f?"rgba(91,124,250,0.08)":"#fff", color: fleetF===f?"rgb(91 124 250)":"rgb(123 130 160)" }}>
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all ${fleetF === f ? "bg-red-50 border-red-600 text-red-600" : "border-slate-200 bg-white text-slate-600"}`}
+              // style={{ borderColor: fleetF===f?"rgb(91 124 250)":"rgb(226 232 240)", background: fleetF===f?"rgba(91,124,250,0.08)":"#fff", color: fleetF===f?"rgb(91 124 250)":"rgb(123 130 160)" }}
+            >
               {f}
             </button>
           ))}
@@ -102,7 +103,8 @@ export function UnservedPanel() {
               return (
                 <tr key={i} className="border-b border-slate-200 hover:bg-red-500/3 transition-colors bg-red-50">
                   <td className="px-3 py-2">
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: u.fleet==="DRY"?"rgba(91,124,250,0.12)":"rgba(14,165,233,0.12)", color: u.fleet==="DRY"?"rgb(91 124 250)":"rgb(2 132 199)" }}>{u.fleet}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${u.fleet==="DRY"?"bg-orange-200 text-orange-600":"bg-sky-100 text-sky-600"}`}>{u.fleet}</span>
+                    {/* <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: u.fleet==="DRY"?"rgba(91,124,250,0.12)":"rgba(14,165,233,0.12)", color: u.fleet==="DRY"?"rgb(91 124 250)":"rgb(2 132 199)" }}>{u.fleet}</span> */}
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px]">{u.store_id}</td>
                   <td className="px-3 py-2 text-[11px] max-w-35 truncate">{u.eng_name}</td>
@@ -114,8 +116,8 @@ export function UnservedPanel() {
                   <td className="px-3 py-2">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: color + "18", color }}>{label}</span>
                   </td>
-                  <td className="px-3 py-2 text-[11px] text-slate-500 max-w-65">
-                    <span title={u.reason} className="truncate block max-w-60">{u.reason}</span>
+                  <td className="px-3 py-2 text-[11px] text-slate-500">
+                    <span title={u.reason} className="block whitespace-normal">{u.reason}</span>
                   </td>
                 </tr>
               );

@@ -115,12 +115,12 @@ export function RoutesPanel() {
             <button
               key={f}
               onClick={() => setFleetF(f)}
-              className="px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all"
-              style={{
-                borderColor: fleetF===f ? "rgb(91 124 250)" : "rgb(226 232 240)",
-                background: fleetF===f ? "rgba(91,124,250,0.08)" : "#fff",
-                color: fleetF===f ? "rgb(91 124 250)" : "rgb(123 130 160)",
-              }}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all ${fleetF === f ? "bg-red-50 border-red-600 text-red-600" : "border-slate-200 bg-white text-slate-600"}`}
+              // style={{
+              //   borderColor: fleetF===f ? "rgb(91 124 250)" : "rgb(226 232 240)",
+              //   background: fleetF===f ? "rgba(91,124,250,0.08)" : "#fff",
+              //   color: fleetF===f ? "rgb(91 124 250)" : "rgb(123 130 160)",
+              // }}
             >
               {f}
             </button>
@@ -178,15 +178,7 @@ export function RoutesPanel() {
                 className={`border-b border-slate-200 hover:bg-blue-500/4 transition-colors ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
               >
                 <td className="px-3 py-2">
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{
-                      background: r.fleet==="DRY" ? "rgba(91,124,250,0.12)" : "rgba(14,165,233,0.12)",
-                      color: r.fleet==="DRY" ? "rgb(91 124 250)" : "rgb(2 132 199)",
-                    }}
-                  >
-                    {r.fleet}
-                  </span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.fleet==="DRY"?"bg-orange-200 text-orange-600":"bg-sky-100 text-sky-600"}`}>{r.fleet}</span>
                 </td>
                 <td className="px-3 py-2 font-mono text-[11px] font-semibold">{r.truck_id}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">T{r.trip_number}</td>
