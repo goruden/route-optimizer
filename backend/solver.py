@@ -1,30 +1,59 @@
 # ============================================================
-#  solver.py  v9.0
+#  solver.py  v9.2
 #
-#  KEY CHANGES FROM v8.1:
+#  KEY CHANGES FROM v9.1:
 #
-#  1. SolverConfig defaults now come from config.py constants.
-#     No magic numbers live in this file — all tunables are in
-#     config.py so operators only edit one file.
+#  1. Outbound-sweep enforcement (two-tier backtrack penalty).
+#     v9.1's 1.3× surcharge was too weak — OR-Tools still found it
+#     cheaper to serve nearby stores on the return leg after far ones.
+#     Two-tier now:
+#       mild backtrack  (ratio < backtrack_threshold 0.70): 1.3×
+#       severe backtrack (ratio < outbound_threshold  0.40): outbound_factor 6×
+#     Applied to all arc-cost callbacks (antibt, geo, fuel).
+#     Result: routes sweep outward and serve stores on the way out,
+#     returning roughly empty. Tune outbound_factor in SolverConfig.
 #
-#  2. penalty_unserved default raised: 10 M → 10 B (from config).
-#     WHY: arc costs are in decimetres. A 500 km route = 5 000 000 dm.
-#     A 10 M penalty is only 2× that — OR-Tools correctly decided
-#     it is cheaper to DROP a hard store than serve it.
-#     10 B always dominates any realistic route cost.
+#  2. Store business hours enforced for far/next-day stores.
+#     v9.1 widened far-store windows to [0, MAX_ROUTE_TIME] which
+#     silently removed their actual opening-hour constraint — a truck
+#     could legally arrive at 03:00 at a store that opens at 09:00.
+#     Fix: if travel_s > tw_close (can't reach today), the window is
+#     shifted forward by 86 400 s (one calendar day) so OR-Tools sees
+#     the NEXT-DAY opening hours. The is_next_day flag in each stop
+#     tells the dispatcher to call ahead.
+#     max_wait_slack_s raised to 18 h so vehicles can legally wait
+#     overnight outside a store without being blocked by the dimension
+#     feasibility check.
 #
-#  3. solver_time_s default raised: 30 → 90 s (from config).
-#     Country/spread-out stores need more GLS iterations.
+#  KEY CHANGES FROM v9.0:
 #
-#  4. _build_nodes: time-window widening for far stores.
-#     Stores whose one-way travel > 40% of shift horizon were being
-#     silently clamped to near-zero windows → infeasible before
-#     OR-Tools even started. Now widened to full horizon so the
-#     solver can attempt them and _diagnose can report clearly.
+#  1. Removed shift-horizon caps that silently dropped far stores.
+#     MAX_ROUTE_TIME is now a flat 48 h (172 800 s) — OR-Tools can
+#     build routes that run past midnight. Stops that arrive after
+#     00:00 are flagged is_next_day=True in the output (was already
+#     wired; just never reachable before).
 #
-#  5. _diagnose: rewritten with 7 specific, actionable checks.
-#     Each unserved store now gets an emoji label, the exact numbers
-#     behind the failure, and concrete steps to fix it.
+#  2. _build_nodes: tw_close no longer clamped to max_h_s.
+#     All-day stores and far stores get tw_close = MAX_ROUTE_TIME
+#     so the solver can schedule them at any hour it needs to.
+#     Stores with explicit wall-clock windows keep those windows
+#     (a store that closes at 18:00 should not receive at 02:00).
+#
+#  3. _build_nodes far-store widening now uses MAX_ROUTE_TIME
+#     instead of max_h_s — actually gives the solver room to work.
+#
+#  4. _or_tools_solve: vehicle end CumulVar range extended to
+#     MAX_ROUTE_TIME (was max_h_s). Soft overtime penalty kept so
+#     the solver still prefers finishing early but won't drop a
+#     store just because it pushes the route past shift-end.
+#
+#  5. _solve_fleet_multitrip: truck-skip guard raised from
+#     max_h_s * 1.5 → MAX_ROUTE_TIME so trucks are never skipped
+#     just because a previous trip ran long.
+#
+#  6. _diagnose check 2 (round-trip impossible): threshold raised
+#     from max_h_s * 1.5 → MAX_ROUTE_TIME. Only fires if the store
+#     is genuinely impossible even within 48 h.
 #
 #  HOW EACH MODE WORKS → see docstring on solve() at the bottom.
 # ============================================================
@@ -41,11 +70,13 @@ import config
 
 log = logging.getLogger(__name__)
 
+# Flat 48-hour ceiling — lets routes run past midnight / into next day.
+# is_next_day flag in each stop handles downstream display.
+MAX_ROUTE_TIME = 48 * 3600  # 172 800 s
+
 
 # ════════════════════════════════════════════════════════════
 #  SolverConfig — all defaults pulled from config.py
-#  main.py still creates SolverConfig(**kwargs) exactly as before;
-#  only the fallback values changed (config.py → here, not hardcoded).
 # ════════════════════════════════════════════════════════════
 
 @dataclass
@@ -69,19 +100,35 @@ class SolverConfig:
     service_time_per_kg_s : float = 0.0
 
     penalty_unserved      : int   = config.PENALTY_UNSERVED      # 10_000_000_000
-    vehicle_fixed_cost    : int   = config.VEHICLE_FIXED_COST    # 50_000
+    vehicle_fixed_cost    : int   = config.VEHICLE_FIXED_COST    # 5_000
     m3_scale              : int   = config.M3_SCALE              # 1_000
     far_threshold_km      : float = config.FAR_THRESHOLD_KM      # 1_000
 
-    max_wait_slack_s      : int   = 7_200   # max early-arrival wait (2 h)
+    # Raised from 7 200 s (2 h) to 18 h so vehicles can wait overnight
+    # outside a store with a next-day window without hitting OR-Tools'
+    # dimension feasibility check.  The time window at each node still
+    # pins the actual arrival to business hours.
+    max_wait_slack_s      : int   = 18 * 3_600   # 64 800 s
 
-    # Anti-backtrack — arcs that move significantly closer to the depot mid-route
-    # cost `backtrack_factor` × more than normal.
-    backtrack_threshold   : float = 0.70
-    backtrack_factor      : float = 1.30
+    # Anti-backtrack — two-tier penalty for going back toward the depot.
+    #
+    # Tier 1 — mild backtrack (ratio < backtrack_threshold):
+    #   cost x backtrack_factor  (1.30x)
+    #   Catches soft U-turns where the next stop is noticeably closer.
+    #
+    # Tier 2 — outbound sweep (ratio < outbound_threshold):
+    #   cost x outbound_factor   (6.0x default)
+    #   Catches return-leg deliveries where the truck has already turned
+    #   around and is heading back to the depot while still delivering.
+    #   Raise outbound_factor (e.g. 10x) to enforce more strictly;
+    #   lower it if too many stores are dropped.
+    backtrack_threshold   : float = 0.70   # ratio below which tier-1 fires
+    backtrack_factor      : float = 1.30   # tier-1 multiplier
+    outbound_threshold    : float = 0.40   # ratio below which tier-2 fires
+    outbound_factor       : float = 6.0    # tier-2 multiplier
 
     # Geographic mode — angular arc penalty weight.
-    # cost(i→j) += cost(i→j) × (angle/180)² × geo_angular_w
+    # cost(i→j) += cost(i→j) x (angle/180)^2 x geo_angular_w
     geo_angular_w         : float = 0.60
 
 
@@ -285,13 +332,20 @@ def _build_nodes(
     """
     Build node list.  Index 0 is always the depot.
 
-    FIX (v9): stores whose one-way travel > 40% of shift horizon had
-    their tw_close clamped to near-zero, making them silently infeasible.
-    They now get the full-horizon window so OR-Tools can attempt them
-    and _diagnose can give a meaningful failure reason.
+    v9.1 — shift-horizon cap removed entirely.
+    Time windows are based on store wall-clock hours only.
+    Stores with no specific window (all-day) get MAX_ROUTE_TIME (48 h)
+    so the solver can reach them at whatever hour the route requires.
+    Arrivals past midnight are flagged is_next_day=True in the output.
+
+    Why not cap at max_h_s?
+      A store 8 h from the depot cannot be served within a 12 h shift
+      if you cap tw_close at shift-end — it becomes instantly infeasible
+      before OR-Tools even starts. Removing the cap lets the solver
+      schedule it late in the day (or overnight) and the is_next_day
+      flag tells the dispatcher to call ahead.
     """
     shift_s = sched["start_hour"] * 3600
-    max_h_s = (sched["max_horizon_hour"] - sched["start_hour"]) * 3600
 
     id_to_travel = dict(zip(store_nids, travel_s))
     dep_lat = float(depot["lat"])
@@ -302,7 +356,7 @@ def _build_nodes(
         "lat"       : dep_lat,
         "lon"       : dep_lon,
         "tw_open"   : 0,
-        "tw_close"  : max_h_s,
+        "tw_close"  : MAX_ROUTE_TIME,
         "demand_kg" : 0.0,
         "demand_m3" : 0.0,
         "is_depot"  : True,
@@ -322,30 +376,57 @@ def _build_nodes(
         is_all_day = (wall_open == 0 and wall_close >= 86_398)
 
         if is_all_day:
+            # No specific hours — solver can arrive any time within 48 h.
             tw_open  = 0
-            tw_close = max_h_s
+            tw_close = MAX_ROUTE_TIME
         else:
             tw_open  = max(0, wall_open  - shift_s)
-            tw_close = min(max_h_s, wall_close - shift_s)
+            tw_close = wall_close - shift_s  # ← no max_h_s cap
 
-        if tw_close <= 0 or tw_close <= tw_open:
-            tw_open  = 0
-            tw_close = max_h_s
+            # If the store's closing time is before the shift starts
+            # (e.g. a 00:00–06:00 store and shift starts at 07:00),
+            # treat it as all-day so the solver can still attempt it.
+            if tw_close <= 0 or tw_close <= tw_open:
+                log.debug(
+                    "[%s] Store %s: wall window %d–%d falls before shift "
+                    "start %02d:00 — widening to full 48h window.",
+                    fleet, s["node_id"],
+                    wall_open // 3600, wall_close // 3600,
+                    sched["start_hour"],
+                )
+                tw_open  = 0
+                tw_close = MAX_ROUTE_TIME
 
-        # ── v9 FIX: widen window for far stores ─────────────────
-        # If one-way travel > 40% of shift, the clamped tw_close may
-        # already be shorter than travel_s → instantly infeasible.
-        # Extend to full horizon so the solver can attempt the store;
-        # _diagnose will then report the real reason for failure.
-        if t_s > 0.40 * max_h_s:
-            tw_open  = 0
-            tw_close = max_h_s
+        # ── Next-day window for far stores ──────────────────────
+        # If one-way travel exceeds today's closing time the store is
+        # unreachable within its own hours TODAY.  Instead of wiping the
+        # hours constraint (which would let a truck arrive at 03:00), shift
+        # the window forward by one calendar day so OR-Tools enforces the
+        # store's real opening hours on the next day.
+        #
+        # Example: store opens 09:00–19:00, shift starts 06:00, travel 14 h.
+        #   Today  : tw_open=10800 (9am), tw_close=46800 (7pm)  — truck
+        #            arrives at 14h shift-relative = 20:00 → after close.
+        #   Next day: tw_open=97200 (9am+24h), tw_close=133200 (7pm+24h)
+        #            — truck arrives at 14h, waits 7h, delivers at 09:00. ✓
+        #   is_next_day flag is set on the stop so the dispatcher can call ahead.
+        #
+        # For all-day stores there are no hours to preserve; keep MAX_ROUTE_TIME.
+        if not is_all_day and t_s > tw_close:
+            tw_open  += 86_400
+            tw_close += 86_400
+            # Clamp to 48-h ceiling; if still unreachable the solver drops it
+            # and _diagnose fires check-2 (physically impossible).
+            tw_open  = min(tw_open,  MAX_ROUTE_TIME)
+            tw_close = min(tw_close, MAX_ROUTE_TIME)
             log.debug(
-                "[%s] Store %s: travel %.1fh > 40%% of horizon %.1fh — "
-                "widening time window to full shift.",
-                fleet, s["node_id"], t_s / 3600, max_h_s / 3600,
+                "[%s] Store %s: travel %.1fh > today's close %.1fh — "
+                "shifted to next-day window [%.1fh, %.1fh].",
+                fleet, s["node_id"],
+                t_s / 3600, (tw_close - 86_400) / 3600,
+                tw_open / 3600, tw_close / 3600,
             )
-        # ── end fix ─────────────────────────────────────────────
+        # ── end next-day fix ────────────────────────────────────
 
         dem_kg = float(s["dry_kg"]  if fleet == "DRY" else s["cold_kg"])
         dem_m3 = float(s["dry_cbm"] if fleet == "DRY" else s["cold_cbm"])
@@ -416,16 +497,23 @@ def _make_time_cb(manager, dur_s: np.ndarray, svc_times: np.ndarray):
 
 def _make_antibt_dist_cb(
     manager,
-    dist_dm       : np.ndarray,
-    dist_depot    : np.ndarray,
-    is_depot_mask : List[bool],
-    threshold     : float,
-    factor        : float,
+    dist_dm          : np.ndarray,
+    dist_depot       : np.ndarray,
+    is_depot_mask    : List[bool],
+    threshold        : float,
+    factor           : float,
+    out_threshold    : float,
+    out_factor       : float,
 ):
     """
-    Distance (decimetres) with anti-backtrack surcharge.
-    Moving to a node significantly closer to the depot than the
-    current node costs `factor` × more — discourages yo-yo routes.
+    Distance (decimetres) with two-tier outbound-sweep penalty.
+
+    Tier 1 (mild backtrack):  ratio < threshold  → cost × factor   (1.30×)
+    Tier 2 (return-leg deliv): ratio < out_threshold → cost × out_factor (6×)
+
+    Tier 2 is the outbound-sweep enforcement: once a truck has visited
+    far stores it becomes very expensive for it to loop back and deliver
+    to nearby stores, so routes naturally serve stores on the way OUT.
     """
     def cb(fi, ti):
         ni   = manager.IndexToNode(fi)
@@ -435,30 +523,33 @@ def _make_antibt_dist_cb(
             return base
         d_i = dist_depot[ni]
         d_j = dist_depot[nj]
-        if d_i > 100 and (d_j / d_i) < threshold:
-            return int(base * factor)
+        if d_i > 100:
+            ratio = d_j / d_i
+            if ratio < out_threshold:          # Tier 2 — return-leg delivery
+                return int(base * out_factor)
+            if ratio < threshold:              # Tier 1 — mild backtrack
+                return int(base * factor)
         return base
     return cb
 
 
 def _make_geo_cb(
     manager,
-    dist_dm       : np.ndarray,
-    dist_depot    : np.ndarray,
-    is_depot_mask : List[bool],
-    bearings      : List[float],
-    angular_w     : float,
-    bt_threshold  : float,
-    bt_factor     : float,
+    dist_dm          : np.ndarray,
+    dist_depot       : np.ndarray,
+    is_depot_mask    : List[bool],
+    bearings         : List[float],
+    angular_w        : float,
+    bt_threshold     : float,
+    bt_factor        : float,
+    out_threshold    : float,
+    out_factor       : float,
 ):
     """
-    Geographic arc cost.
+    Geographic arc cost with two-tier outbound-sweep penalty.
 
     cost(i→j) = base + base × (angle/180)² × angular_w
-                (× bt_factor if backtracking)
-
-    Stores in the same compass direction are cheap to chain;
-    stores on opposite sides are expensive.
+    Then Tier-1 or Tier-2 backtrack multiplier applied on top.
     """
     def cb(fi, ti):
         ni   = manager.IndexToNode(fi)
@@ -474,22 +565,28 @@ def _make_geo_cb(
 
         d_i = dist_depot[ni]
         d_j = dist_depot[nj]
-        if d_i > 100 and (d_j / d_i) < bt_threshold:
-            return int(cost * bt_factor)
+        if d_i > 100:
+            ratio = d_j / d_i
+            if ratio < out_threshold:          # Tier 2
+                return int(cost * out_factor)
+            if ratio < bt_threshold:           # Tier 1
+                return int(cost * bt_factor)
         return cost
     return cb
 
 
 def _make_fuel_cb(
     manager,
-    dist_dm       : np.ndarray,
-    dist_depot    : np.ndarray,
-    is_depot_mask : List[bool],
-    fpm           : float,
-    bt_threshold  : float,
-    bt_factor     : float,
+    dist_dm          : np.ndarray,
+    dist_depot       : np.ndarray,
+    is_depot_mask    : List[bool],
+    fpm              : float,
+    bt_threshold     : float,
+    bt_factor        : float,
+    out_threshold    : float,
+    out_factor       : float,
 ):
-    """Fuel cost (₮/decimetre × distance) with anti-backtrack penalty."""
+    """Fuel cost (per decimetre) with two-tier outbound-sweep penalty."""
     def cb(fi, ti):
         ni   = manager.IndexToNode(fi)
         nj   = manager.IndexToNode(ti)
@@ -498,14 +595,18 @@ def _make_fuel_cb(
             return base
         d_i = dist_depot[ni]
         d_j = dist_depot[nj]
-        if d_i > 100 and (d_j / d_i) < bt_threshold:
-            return int(base * bt_factor)
+        if d_i > 100:
+            ratio = d_j / d_i
+            if ratio < out_threshold:          # Tier 2
+                return int(base * out_factor)
+            if ratio < bt_threshold:           # Tier 1
+                return int(base * bt_factor)
         return base
     return cb
 
 
 # ════════════════════════════════════════════════════════════
-#  Unserved diagnosis  (v9 — specific & actionable)
+#  Unserved diagnosis  (v9.1 — horizon-aware)
 # ════════════════════════════════════════════════════════════
 
 def _diagnose(
@@ -523,7 +624,7 @@ def _diagnose(
 
     Checks (first match wins):
       1. Demand exceeds every available vehicle
-      2. Round-trip physically impossible within shift window
+      2. Round-trip physically impossible even within 48 h
       3. Store's time window is narrower than travel time
       4. Invalid / zero time window in source data
       5. Fleet total capacity exhausted across all trips
@@ -535,14 +636,21 @@ def _diagnose(
     max_kg = max((v["cap_kg"] for v in vehicles), default=0)
     max_m3 = max((v["cap_m3"] for v in vehicles), default=0)
     t_s    = nd.get("travel_s", 0.0)
-
-    max_h_s = (sched["max_horizon_hour"] - sched["start_hour"]) * 3600
+    svc_s  = nd.get("service_s", cfg.service_time_base_s)
 
     ni      = nid_to_idx.get(nd["node_id"], 0)
     dist_km = float(dist_mat[0][ni]) / 1000.0 if ni else 0.0
 
     tw_open  = nd.get("tw_open",  0)
     tw_close = nd.get("tw_close", 0)
+
+    log.warning(
+        "[DROP DEBUG] %s | travel=%.2fh | round_trip=%.2fh | 48h_ceiling=%.0fh",
+        nd["node_id"],
+        t_s / 3600,
+        (t_s * 2 + svc_s) / 3600,
+        MAX_ROUTE_TIME / 3600,
+    )
 
     # 1. Individual demand exceeds every vehicle ──────────────
     if dkg > max_kg * 1.01:
@@ -561,27 +669,24 @@ def _diagnose(
             f"Split the order or add a vehicle with ≥ {needed_m3:.2f} m³."
         )
 
-    # 2. Round-trip physically impossible in shift window ─────
-    svc_s        = nd.get("service_s", cfg.service_time_base_s)
+    # 2. Round-trip physically impossible even within 48 h ────
+    # (Only fires if even a full 48-hour window cannot fit the journey.)
     round_trip_s = t_s * 2 + svc_s
-    if round_trip_s > max_h_s:
-        rth  = round_trip_s / 3600
-        horh = max_h_s / 3600
-        sh   = sched["start_hour"]
-        eh   = sched["max_horizon_hour"]
+    if round_trip_s > MAX_ROUTE_TIME:
+        rth = round_trip_s / 3600
         return (
-            f"🚛  Physically unreachable within the shift window. "
+            f"🚛  Physically unreachable even within a 48-hour window. "
             f"Round-trip = travel {t_s/3600:.1f}h × 2 + "
-            f"service {svc_s/60:.0f} min = {rth:.1f}h, "
-            f"but the shift is only {horh:.0f}h "
-            f"({sh:02d}:00 – {eh:02d}:00). "
-            f"Options: (a) extend shift end past {eh:02d}:00, "
-            f"(b) run a dedicated overnight trip for this store, "
-            f"(c) allow next-day delivery."
+            f"service {svc_s/60:.0f} min = {rth:.1f}h. "
+            f"Options: (a) use a regional staging depot closer to this store, "
+            f"(b) air-freight the order, "
+            f"(c) schedule a dedicated multi-day run."
         )
 
     # 3. Time window too narrow for travel ────────────────────
-    if tw_close > 0 and t_s > tw_close:
+    # Only meaningful if tw_close is a real store-hours constraint
+    # (not the 48-h fallback we assign to far/all-day stores).
+    if tw_close < MAX_ROUTE_TIME and t_s > tw_close:
         shift_s       = sched["start_hour"] * 3600
         open_wall     = (tw_open  + shift_s) // 3600
         close_wall    = (tw_close + shift_s) // 3600
@@ -593,7 +698,7 @@ def _diagnose(
             f"but store closes at {close_wall:02d}:00 "
             f"(open {open_wall:02d}:00 – {close_wall:02d}:00). "
             f"Travel alone takes {t_s/3600:.1f}h. "
-            f"Fix: ask store to accept earlier delivery, "
+            f"Fix: ask store to accept a next-day window, "
             f"or use a closer staging depot."
         )
 
@@ -652,8 +757,8 @@ def _diagnose(
         )
 
     # 7. Generic — solver dropped during optimisation ─────────
-    window_h    = (tw_close - tw_open) / 3600
-    util_pct    = (total_dem_kg / total_cap_kg * 100) if total_cap_kg else 0
+    window_h  = (tw_close - tw_open) / 3600
+    util_pct  = (total_dem_kg / total_cap_kg * 100) if total_cap_kg else 0
     return (
         f"🔧  Dropped by solver during optimisation "
         f"({dist_km:.0f} km from depot, "
@@ -689,10 +794,13 @@ def _or_tools_solve(
 
     vehicles[i]["start_offset"] = shift-relative seconds when truck i
     becomes available.  Trip 1 → 0.  Trip N+1 → trip-N return + reload.
+
+    MAX_ROUTE_TIME (48 h) is the hard ceiling for OR-Tools' time
+    dimension. Stops arriving past 86 400 s wall-clock are flagged
+    is_next_day=True so dispatchers can call ahead.
     """
     sched   = config.FLEET_SCHEDULE[fleet]
     shift_s = sched["start_hour"] * 3600
-    max_h_s = (sched["max_horizon_hour"] - sched["start_hour"]) * 3600
 
     min_offset  = min(int(v.get("start_offset", 0)) for v in vehicles)
     depart_hour = _trip_depart_hour(fleet, min_offset)
@@ -737,6 +845,7 @@ def _or_tools_solve(
         _make_antibt_dist_cb(
             manager, dist_dm, dist_depot, is_depot_mask,
             cfg.backtrack_threshold, cfg.backtrack_factor,
+            cfg.outbound_threshold,  cfg.outbound_factor,
         )
     )
     geo_cb_idx = routing.RegisterTransitCallback(
@@ -744,6 +853,7 @@ def _or_tools_solve(
             manager, dist_dm, dist_depot, is_depot_mask,
             bearings, cfg.geo_angular_w,
             cfg.backtrack_threshold, cfg.backtrack_factor,
+            cfg.outbound_threshold,  cfg.outbound_factor,
         )
     )
 
@@ -777,7 +887,9 @@ def _or_tools_solve(
                 routing.RegisterTransitCallback(
                     _make_fuel_cb(
                         manager, dist_dm, dist_depot, is_depot_mask,
-                        fpm, cfg.backtrack_threshold, cfg.backtrack_factor,
+                        fpm,
+                        cfg.backtrack_threshold, cfg.backtrack_factor,
+                        cfg.outbound_threshold,  cfg.outbound_factor,
                     )
                 ),
                 vi,
@@ -809,10 +921,13 @@ def _or_tools_solve(
     )
 
     # 8. Time-window dimension ─────────────────────────────────
+    # Hard ceiling is MAX_ROUTE_TIME (48 h). There is no shift-horizon
+    # cap here — the soft penalty below encourages finishing early
+    # without forbidding late routes.
     routing.AddDimension(
         time_cb_idx,
         cfg.max_wait_slack_s,
-        max_h_s,
+        MAX_ROUTE_TIME,
         False,
         "Time",
     )
@@ -825,17 +940,38 @@ def _or_tools_solve(
             nd["tw_open"], nd["tw_close"]
         )
 
+    max_h_s = (sched["max_horizon_hour"] - sched["start_hour"]) * 3600
+
     for vi, veh in enumerate(vehicles):
         start_off = int(veh.get("start_offset", 0))
+
         time_dim.CumulVar(routing.Start(vi)).SetRange(start_off, start_off)
-        time_dim.CumulVar(routing.End(vi)).SetRange(start_off, max_h_s)
+
+        # Hard upper bound removed — route can extend past shift-end.
+        # Soft penalty keeps the solver preferring on-time returns
+        # without ever dropping a store purely due to shift length.
+        time_dim.CumulVar(routing.End(vi)).SetRange(start_off, MAX_ROUTE_TIME)
+
+        time_dim.SetCumulVarSoftUpperBound(
+            routing.End(vi),
+            max_h_s,           # prefer finishing within normal shift
+            50,                # cost per second overtime (₮/s, tune if needed)
+        )
 
     if span_coeff > 0:
         time_dim.SetGlobalSpanCostCoefficient(span_coeff)
 
     # 9. Disjunctions ──────────────────────────────────────────
     for i in range(1, n):
-        routing.AddDisjunction([manager.NodeToIndex(i)], cfg.penalty_unserved)
+        node_idx = manager.NodeToIndex(i)
+
+        # Far stores get an even higher penalty to make them near-mandatory.
+        # Because MAX_ROUTE_TIME is now the ceiling (not max_h_s),
+        # the solver actually has room to serve them.
+        if nodes[i]["travel_s"] > max_h_s * 0.6:
+            routing.AddDisjunction([node_idx], cfg.penalty_unserved * 10)
+        else:
+            routing.AddDisjunction([node_idx], cfg.penalty_unserved)
 
     # 10. Search parameters ────────────────────────────────────
     params = pywrapcp.DefaultRoutingSearchParameters()
@@ -925,7 +1061,7 @@ def _or_tools_solve(
             if not nd["is_depot"]:
                 served_ids.add(nd["node_id"])
                 t_solver = solution.Value(time_dim.CumulVar(idx))
-                arr_wall = t_solver + shift_s
+                arr_wall = t_solver + shift_s   # absolute wall-clock seconds
 
                 stops.append({
                     "node_id"    : nd["node_id"],
@@ -936,6 +1072,7 @@ def _or_tools_solve(
                     "demand_m3"  : float(nd["demand_m3"]),
                     "lat"        : float(nd["lat"]),
                     "lon"        : float(nd["lon"]),
+                    # Arrival past midnight → flag for dispatcher
                     "is_next_day": bool(arr_wall >= 86_400),
                 })
 
@@ -1018,7 +1155,6 @@ def _solve_fleet_multitrip(
                    (heavy, tight-window stores seeded first).
     """
     sched   = config.FLEET_SCHEDULE[fleet]
-    max_h_s = (sched["max_horizon_hour"] - sched["start_hour"]) * 3600
 
     fleet_key = "has_dry" if fleet == "DRY" else "has_cold"
     dem_field = "dry_kg"  if fleet == "DRY" else "cold_kg"
@@ -1037,7 +1173,11 @@ def _solve_fleet_multitrip(
         log.debug("[%s] geographic: stores sorted by bearing.", fleet)
     else:
         eligible.sort(
-            key=lambda s: (-s.get(dem_field, 0.0), s.get("close_s", 86399))
+            key=lambda s: (
+                -_haversine_m(dep_lat, dep_lon, float(s["lat"]), float(s["lon"])),  # FAR FIRST
+                -s.get(dem_field, 0.0),
+                s.get("close_s", 86399),
+            )
         )
 
     remaining   = eligible
@@ -1053,11 +1193,14 @@ def _solve_fleet_multitrip(
             offset = 0 if trip_num == 1 else int(
                 truck_return[v["truck_id"]] + cfg.reload_time_s
             )
-            if offset >= max_h_s:
+            # Skip trucks whose reload offset exceeds the 48-hour ceiling.
+            # This is intentionally generous — a truck that returned at
+            # 30 h can still do a second trip if needed.
+            if offset >= MAX_ROUTE_TIME:
                 log.debug(
-                    "[%s] Truck %s skipped trip %d: offset %.2fh ≥ shift end %.2fh",
+                    "[%s] Truck %s skipped trip %d: offset %.2fh exceeds 48h ceiling",
                     fleet, v["truck_id"], trip_num,
-                    offset / 3600, max_h_s / 3600,
+                    offset / 3600,
                 )
                 continue
             available.append({**v, "start_offset": offset})
@@ -1165,6 +1308,14 @@ def solve(
         sectors (one per vehicle), fed to ReadAssignmentFromRoutes().
         GLS then refines within and between sectors.
         Result: compact pie-slice routes — each truck covers one wedge.
+
+    Next-day delivery
+        Routes are no longer capped at the shift horizon. OR-Tools may
+        schedule far stores for overnight arrival; those stops are marked
+        is_next_day=True so dispatchers can notify the store in advance.
+        The soft overtime penalty (50 ₮/s past shift-end) keeps the
+        solver preferring on-time finishes without ever dropping a store
+        purely because of clock constraints.
 
     Returns:
         {"DRY":  {routes, unserved, nodes, fleet},

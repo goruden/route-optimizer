@@ -180,7 +180,7 @@ MIN_CLUSTER_SOLVER_TIME     = 5    # minimum per cluster (reduced from 30)
 
 # ── Penalties & Fixed Costs ─────────────────────────────────
 PENALTY_UNSERVED     = 10_000_000_000  # must exceed any route cost to force serving stores
-VEHICLE_FIXED_COST   = 50_000          # small cost per trip to discourage empty trips
+VEHICLE_FIXED_COST   = 5_000          # small cost per trip to discourage empty trips
 # For "balanced" mode: penalty on kg-load span (max_load - min_load) across trucks.
 # Higher value → more even loads, possibly longer total distance.
 BALANCED_SPAN_COEFF  = 300
