@@ -6,9 +6,9 @@ import type { Store, StopDetail, MapRoute } from "@/types/vrp";
 import "leaflet/dist/leaflet.css";
 import { SeeIcon, UnseeIcon, LocationIcon, ClockIcon, PackageIcon, GraphIcon, SnowflakeIcon, BalanceIcon, BoxIcon, StoreIcon, CheckIcon, VehicleIcon } from "./icons";
 
-const UB:  [number,number] = [47.9179, 106.9177];
-const DRY: [number,number] = [47.8847516, 106.7932466];
-const COL: [number,number] = [47.80758101116645, 107.19407110357587];
+const UB: [number, number] = [47.9179, 106.9177];
+const DRY: [number, number] = [47.8847516, 106.7932466];
+const COL: [number, number] = [47.80758101116645, 107.19407110357587];
 
 /* synthesise a Store from stop data when no dataset loaded */
 function synthStore(sid: string, stops: StopDetail[]): Store | null {
@@ -23,7 +23,7 @@ function synthStore(sid: string, stops: StopDetail[]): Store | null {
     address: m.address, detail_addr: m.detail_addr ?? "",
     lat: m.lat, lon: m.lon, open_s: 0, close_s: 86399,
     dry_cbm: 0, cold_cbm: 0,
-    dry_kg:  ds.reduce((a, d) => a + d.demand_kg, 0),
+    dry_kg: ds.reduce((a, d) => a + d.demand_kg, 0),
     cold_kg: cs.reduce((a, d) => a + d.demand_kg, 0),
     has_dry: ds.length > 0, has_cold: cs.length > 0,
   };
@@ -33,21 +33,22 @@ export default function MapPanel() {
   const { s, d } = useApp();
   const { stores, mapData, routeVis, fleetFilter, activeJobId, stopDetails } = s;
 
-  const mapRef     = useRef<HTMLDivElement>(null);
-  const mapInst    = useRef<any>(null);
-  const storeLyr   = useRef<Map<string, any>>(new Map());
-  const routeLyr   = useRef<Map<string, { poly: any; dots: any[] }>>(new Map());
-  const inited     = useRef(false);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInst = useRef<any>(null);
+  const storeLyr = useRef<Map<string, any>>(new Map());
+  const routeLyr = useRef<Map<string, { poly: any; dots: any[] }>>(new Map());
+  const inited = useRef(false);
 
   /* drawer state — fully local, no global dispatch needed */
-  const [drawerStore,  setDrawerStore]  = useState<Store | null>(null);
-  const [drawerDels,   setDrawerDels]   = useState<StopDetail[]>([]);
-  const [drawerOpen,   setDrawerOpen]   = useState(false);
+  const [drawerStore, setDrawerStore] = useState<Store | null>(null);
+  const [drawerDels, setDrawerDels] = useState<StopDetail[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [routeControlCollapsed, setRouteControlCollapsed] = useState(false);
   const [badgesVisible, setBadgesVisible] = useState(false);
+  const [storesMode, setStoresMode] = useState<"all" | "routes">("all");
 
   /* stable ref so Leaflet callbacks never go stale */
-  const openRef = useRef<(nodeId: string) => void>(() => {});
+  const openRef = useRef<(nodeId: string) => void>(() => { });
   useEffect(() => {
     openRef.current = (nodeId: string) => {
       const found = s.stores.find(st => st.node_id === nodeId)
@@ -80,12 +81,12 @@ export default function MapPanel() {
     //   storeLyr.current.forEach(m => map.removeLayer(m));
     //   storeLyr.current.clear();
     // });
-    inited.current  = true;
+    inited.current = true;
 
     /* depot markers */
     [
-      { pos: DRY, c: "#5B7CFA", icon: "🏭", label: "Dry DC",  dep: "13:00" },
-      { pos: COL, c: "#0EA5E9", icon: "❄️",  label: "Cold DC", dep: "03:00" },
+      { pos: DRY, c: "#5B7CFA", icon: "🏭", label: "Dry DC", dep: "13:00" },
+      { pos: COL, c: "#0EA5E9", icon: "❄️", label: "Cold DC", dep: "03:00" },
     ].forEach(dep => {
       const ic = L.divIcon({
         html: `<div style="width:40px;height:40px;border-radius:50%;background:${dep.c};display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid #fff;box-shadow:0 4px 16px ${dep.c}55;">${dep.icon}</div>`,
@@ -96,7 +97,7 @@ export default function MapPanel() {
     });
 
     return () => { map.remove(); mapInst.current = null; inited.current = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ── store markers — rebuilds when visibility/filter changes ── */
@@ -128,6 +129,11 @@ export default function MapPanel() {
         route.stops.some(s => s.store_id === st.store_id)
       );
 
+      // Skip store if in "routes" mode and not part of any visible route
+      if (storesMode === "routes" && !isActive) {
+        return;
+      }
+
       // 🔥 only show badges when zoomed in
       // const showBadges = zoom >= 15;
       const showBadges = badgesVisible;
@@ -148,7 +154,7 @@ export default function MapPanel() {
       storeLyr.current.set(st.node_id, mk);
     });
     /* NO fitBounds — map never auto-zooms */
-  }, [stores, stopDetails, mapData, routeVis, fleetFilter, activeJobId, badgesVisible]);
+  }, [stores, stopDetails, mapData, routeVis, fleetFilter, activeJobId, badgesVisible, storesMode]);
 
   /* ── route polylines ───────────────────────────────── */
   useEffect(() => {
@@ -182,7 +188,7 @@ export default function MapPanel() {
         return L.marker([stop.lat, stop.lon], { icon: ic, zIndexOffset: 200 })
           .addTo(map)
           .on("click", () => openRef.current(stop.store_id));
-        });
+      });
       routeLyr.current.set(route.route_id, { poly, dots });
     });
     /* NO fitBounds */
@@ -197,7 +203,7 @@ export default function MapPanel() {
       const ok = fleetFilter === "ALL" || (route?.fleet ?? "") === fleetFilter;
       const show = routeVis[rid] !== false && ok;
       if (show) { if (!map.hasLayer(poly)) map.addLayer(poly); dots.forEach(dot => { if (!map.hasLayer(dot)) map.addLayer(dot); }); }
-      else       { if (map.hasLayer(poly)) map.removeLayer(poly); dots.forEach(dot => { if (map.hasLayer(dot)) map.removeLayer(dot); }); }
+      else { if (map.hasLayer(poly)) map.removeLayer(poly); dots.forEach(dot => { if (map.hasLayer(dot)) map.removeLayer(dot); }); }
     });
   }, [routeVis, fleetFilter, mapData]);
 
@@ -216,7 +222,7 @@ export default function MapPanel() {
         </div>
       )}
 
-      {mapData.length > 0 && <RouteControlPanel collapsed={routeControlCollapsed} setCollapsed={setRouteControlCollapsed} badgesVisible={badgesVisible} setBadgesVisible={setBadgesVisible} />}
+      {mapData.length > 0 && <RouteControlPanel collapsed={routeControlCollapsed} setCollapsed={setRouteControlCollapsed} badgesVisible={badgesVisible} setBadgesVisible={setBadgesVisible} storesMode={storesMode} setStoresMode={setStoresMode} />}
       <StoreDrawer store={drawerStore} dels={drawerDels} open={drawerOpen} mapData={mapData}
         onClose={() => { setDrawerOpen(false); setRouteControlCollapsed(false); d({ t: "SET_SEL", v: null }); }} />
     </div>
@@ -226,17 +232,19 @@ export default function MapPanel() {
 /* ═══════════════════════════════════════════════════════
    Route control panel (floating, top-right)
    ═══════════════════════════════════════════════════════ */
-function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVisible }: { 
-  collapsed: boolean; 
+function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVisible, storesMode, setStoresMode }: {
+  collapsed: boolean;
   setCollapsed: (value: boolean) => void;
   badgesVisible: boolean;
   setBadgesVisible: (value: boolean) => void;
+  storesMode: "all" | "routes";
+  setStoresMode: (value: "all" | "routes") => void;
 }) {
   const { s, d } = useApp();
   const { mapData, routeVis, fleetFilter } = s;
 
   const visible = fleetFilter === "ALL" ? mapData : mapData.filter(r => r.fleet === fleetFilter);
-  const allOn   = visible.every(r => routeVis[r.route_id] !== false);
+  const allOn = visible.every(r => routeVis[r.route_id] !== false);
 
   return (
     <div className="absolute top-3 right-3 z-1000 bg-white/96 backdrop-blur border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden"
@@ -247,7 +255,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
         {!collapsed && (
           <div className="flex items-center gap-3 flex-1">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Чиглэл</span>
-            <div className="flex gap-1.5">
+            {/* <div className="flex gap-1.5">
               <button onClick={() => d({ t: "TOGGLE_ALL", v: !allOn })}
                 className="px-2 py-1 text-[10px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors">
                 {allOn ? "Hide all" : "Show all"}
@@ -256,7 +264,7 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
                 className="px-2 py-1 text-[10px] font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-md transition-colors">
                 {badgesVisible ? "Hide badges" : "Show badges"}
               </button>
-            </div>
+            </div> */}
           </div>
         )}
         <button onClick={() => setCollapsed(!collapsed)}
@@ -267,14 +275,39 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
 
       {!collapsed && <>
         {/* fleet filter */}
+        <div className="flex gap-1.5 px-2 pt-2">
+          <button onClick={() => d({ t: "TOGGLE_ALL", v: !allOn })}
+            className="flex-1 px-2 py-1 text-[10px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 border rounded-md transition-colors">
+            {allOn ? "All Route" : "No Routes"}
+          </button>
+          <button onClick={() => setStoresMode(storesMode === "all" ? "routes" : "all")}
+            className="flex-1 px-2 py-1 text-[10px] font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 border rounded-md transition-colors">
+            {storesMode === "all" ? "All Stores" : "Route Stores"}
+          </button>
+          <button onClick={() => setBadgesVisible(!badgesVisible)}
+            className="flex-1 px-2 py-1 text-[10px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 border rounded-md transition-colors">
+            {badgesVisible ? "Badges" : "No badges"}
+          </button>
+        </div>
+      </>}
+
+      {!collapsed && <>
+        {/* fleet filter */}
         <div className="flex gap-1.5 p-2 border-b border-slate-200 shrink-0">
           {(["ALL", "DRY", "COLD"] as const).map(f => {
             const act = fleetFilter === f;
-            const c = f === "DRY" ? "rgb(91 124 250)" : f === "COLD" ? "rgb(14 165 233)" : "rgb(123 130 160)";
             return (
               <button key={f} onClick={() => d({ t: "FLEET", v: f })}
-                className="flex-1 py-1.5 rounded-lg text-[10px] font-bold border-[1.5px] transition-all"
-                style={{ borderColor: act ? c : "rgb(226 232 240)", background: act ? c + "18" : "#fff", color: act ? c : "rgb(123 130 160)" }}>
+                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border-[1.5px] transition-all ${
+                  act 
+                    ? f === "DRY" 
+                      ? "border-orange-500 bg-orange-50 text-orange-500"
+                      : f === "COLD"
+                      ? "border-sky-500 bg-sky-50 text-sky-500"
+                      : "border-slate-500 bg-slate-50 text-slate-500"
+                    : "border-slate-200 bg-white text-slate-500"
+                }`}
+                >
                 {f}
               </button>
             );
@@ -286,23 +319,23 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
           {visible.length === 0
             ? <p className="text-[11px] text-slate-500 text-center py-3">Чиглэл байхгүй байна {fleetFilter}</p>
             : visible.map(route => {
-                const on = routeVis[route.route_id] !== false;
-                return (
-                  <button key={route.route_id}
-                    onClick={() => d({ t: "TOGGLE_ROUTE", v: route.route_id })}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-xl w-full text-left transition-all hover:bg-slate-50"
-                    style={{ opacity: on ? 1 : 0.35 }}>
-                    <div className="w-7 h-1 rounded-full shrink-0" style={{ background: route.color }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-bold text-slate-900 truncate">
-                        {route.truck_id}<span className="font-normal text-slate-500 ml-1">Х{route.trip_number}</span>
-                      </div>
-                      <div className="text-[9px] text-slate-500">{route.fleet} · {route.stops.length} зогсоол · {route.summary.distance_km}km</div>
+              const on = routeVis[route.route_id] !== false;
+              return (
+                <button key={route.route_id}
+                  onClick={() => d({ t: "TOGGLE_ROUTE", v: route.route_id })}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-xl w-full text-left transition-all hover:bg-slate-50"
+                  style={{ opacity: on ? 1 : 0.35 }}>
+                  <div className="w-7 h-1 rounded-full shrink-0" style={{ background: route.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-bold text-slate-900 truncate">
+                      {route.truck_id}<span className="font-normal text-slate-500 ml-1">Х{route.trip_number}</span>
                     </div>
-                    <span className="text-[13px] shrink-0">{on ? <SeeIcon /> : <UnseeIcon />}</span>
-                  </button>
-                );
-              })
+                    <div className="text-[9px] text-slate-500">{route.fleet} · {route.stops.length} зогсоол · {route.summary.distance_km}km</div>
+                  </div>
+                  <span className="text-[13px] shrink-0">{on ? <SeeIcon /> : <UnseeIcon />}</span>
+                </button>
+              );
+            })
           }
         </div>
       </>}
@@ -320,7 +353,7 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
   const [tab, setTab] = useState<"info" | "dry" | "cold">("info");
   useEffect(() => { if (open) setTab("info"); }, [open, store?.store_id]);
 
-  const dryDels  = dels.filter(d => d.fleet === "DRY");
+  const dryDels = dels.filter(d => d.fleet === "DRY");
   const coldDels = dels.filter(d => d.fleet === "COLD");
 
   return (
@@ -332,7 +365,7 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
           {/* header */}
           <div className="shrink-0 px-4 py-4 border-b border-slate-200" style={{ background: "linear-gradient(135deg,#F8FAFC,#F0F9FF)" }}>
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: "linear-gradient(135deg,#3B82F6,#0EA5E9)", color: "white" }}><StoreIcon size="size-6"/></div>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: "linear-gradient(135deg,#3B82F6,#0EA5E9)", color: "white" }}><StoreIcon size="size-6" /></div>
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-extrabold text-slate-900 truncate">{store.eng_name || store.store_id}</div>
                 <div className="text-[11px] text-slate-500">{store.mn_name}</div>
@@ -341,7 +374,7 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
             </div>
             <div className="flex gap-1.5 flex-wrap mb-3">
               <span className="font-mono text-[10px] bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-md font-bold">#{store.store_id}</span>
-              {store.has_dry  && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 flex items-center gap-1"><BoxIcon size="size-3" /> DRY</span>}
+              {store.has_dry && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 flex items-center gap-1"><BoxIcon size="size-3" /> DRY</span>}
               {store.has_cold && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 flex items-center gap-1"><SnowflakeIcon size="size-3" /> COLD</span>}
               {dels.length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 flex items-center gap-1"><CheckIcon size="size-3" /> {dels.length} хүргэлт</span>}
             </div>
@@ -349,7 +382,7 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
             <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.65)" }}>
               {[
                 { k: "info", l: "Дэлэгрэнгүй" },
-                ...(dryDels.length  > 0 ? [{ k: "dry",  l: `DRY (${dryDels.length})`  }] : []),
+                ...(dryDels.length > 0 ? [{ k: "dry", l: `DRY (${dryDels.length})` }] : []),
                 ...(coldDels.length > 0 ? [{ k: "cold", l: `COLD (${coldDels.length})` }] : []),
               ].map(t => (
                 <button key={t.k} onClick={() => setTab(t.k as any)}
@@ -363,9 +396,9 @@ function StoreDrawer({ store, dels, open, mapData, onClose }: {
 
           {/* body */}
           <div className="flex-1 overflow-y-auto p-4">
-            {tab === "info"  && <InfoTab store={store} />}
-            {tab === "dry"   && <DeliveryTab dels={dryDels}  fleet="DRY"  mapData={mapData} />}
-            {tab === "cold"  && <DeliveryTab dels={coldDels} fleet="COLD" mapData={mapData} />}
+            {tab === "info" && <InfoTab store={store} />}
+            {tab === "dry" && <DeliveryTab dels={dryDels} fleet="DRY" mapData={mapData} />}
+            {tab === "cold" && <DeliveryTab dels={coldDels} fleet="COLD" mapData={mapData} />}
           </div>
         </>}
       </div>
@@ -384,26 +417,26 @@ function InfoTab({ store }: { store: Store }) {
       </Card>
       <Card title={<><ClockIcon size="size-4" className="inline mr-1" />Цагийн хуваарь</>}>
         <div className="flex items-center gap-4">
-          <TimeBox label="Opens"  time={fmtSec(store.open_s)}  color="#10B981" />
+          <TimeBox label="Opens" time={fmtSec(store.open_s)} color="#10B981" />
           <span className="text-muted">→</span>
           <TimeBox label="Closes" time={fmtSec(store.close_s)} color="#EF4444" />
         </div>
       </Card>
       {(store.has_dry || store.has_cold) && (
         <Card title={<><GraphIcon size="size-4" className="inline mr-1" />Захиалгын дундаж</>}>
-          {store.has_dry  && <DBar label="DRY weight"  val={store.dry_kg}   unit="kg" color="#5B7CFA" max={5000} />}
-          {store.has_dry  && <DBar label="DRY volume"  val={store.dry_cbm}  unit="m³" color="#5B7CFA" max={20}   />}
-          {store.has_cold && <DBar label="COLD weight" val={store.cold_kg}  unit="kg" color="#0EA5E9" max={5000} />}
-          {store.has_cold && <DBar label="COLD volume" val={store.cold_cbm} unit="m³" color="#0EA5E9" max={20}   />}
+          {store.has_dry && <DBar label="DRY weight" val={store.dry_kg} unit="kg" color="#5B7CFA" max={5000} />}
+          {store.has_dry && <DBar label="DRY volume" val={store.dry_cbm} unit="m³" color="#5B7CFA" max={20} />}
+          {store.has_cold && <DBar label="COLD weight" val={store.cold_kg} unit="kg" color="#0EA5E9" max={5000} />}
+          {store.has_cold && <DBar label="COLD volume" val={store.cold_cbm} unit="m³" color="#0EA5E9" max={20} />}
         </Card>
       )}
     </div>
   );
 }
 
-function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY"|"COLD"; mapData: MapRoute[] }) {
+function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY" | "COLD"; mapData: MapRoute[] }) {
   const baseColor = fleet === "DRY" ? "#5B7CFA" : "#0EA5E9";
-  const getColor  = (dd: StopDetail) =>
+  const getColor = (dd: StopDetail) =>
     mapData.find(r => r.fleet === dd.fleet && r.truck_id === dd.truck_id && r.trip_number === dd.trip_number)?.color ?? baseColor;
 
   if (!dels.length) return (
@@ -440,16 +473,16 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: rc + "18", color: rc }}>Зогсоол #{dd.stop_order}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                  <TBox label="Ирэх"  time={dd.arrival}   color="#10B981" />
-                  <TBox label="Явах"  time={dd.departure} color="#EF4444" />
+                  <TBox label="Ирэх" time={dd.arrival} color="#10B981" />
+                  <TBox label="Явах" time={dd.departure} color="#EF4444" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <DPill icon={<BalanceIcon size="size-4"/>} label="Weight" val={`${dd.demand_kg.toFixed(1)} kg`} />
+                  <DPill icon={<BalanceIcon size="size-4" />} label="Weight" val={`${dd.demand_kg.toFixed(1)} kg`} />
                   <DPill icon={<BoxIcon />} label="Volume" val={`${dd.demand_m3.toFixed(3)} m³`} />
                 </div>
                 {dd.delivery_day !== "Same day" && (
                   <div className="mt-2 text-[11px] font-semibold text-amber-500 bg-amber-500/8 rounded-lg px-2 py-1">{dd.delivery_day}</div>
-                )} 
+                )}
               </div>
             </div>
           );
