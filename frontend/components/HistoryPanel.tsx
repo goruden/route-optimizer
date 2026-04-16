@@ -52,6 +52,7 @@ function JobCard({job:j,active,onClickJob,onFork,onRemove}:{job:any;active:boole
         </div>
       </div>
       {j.status==="done"&&<div className="flex flex-wrap gap-1 mb-1">
+        {j.season&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-500 capitalize">{j.season}</span>}
         {j.total_served!=null&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-500"><CheckIcon size="size-3" className="inline mr-1" />{j.total_served}</span>}
         {!!j.total_unserved&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500"><WarningIcon size="size-3" className="inline mr-1" />{j.total_unserved}</span>}
         {j.total_routes!=null&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500"><VehicleIcon size="size-3" className="inline mr-1" />{j.total_routes}</span>}

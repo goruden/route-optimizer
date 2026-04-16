@@ -19,31 +19,64 @@ STORE_SHEET    = "Store"
 VEHICLE_SHEET  = "Vehicle"
 DURATION_SHEET = "Duration"
 DISTANCE_SHEET = "Distance"
+DRY_DC_ROUTE_SHEET = "Dry DC"
+COLD_DC_ROUTE_SHEET = "Cold DC"
 
 # ── Store Sheet Column Names ────────────────────────────────
 COL_STORE_ID  = "Store ID"
+COL_USE_YN    = "USE_YN"
 COL_ENG_NAME  = "BIZLOC_ENG_NM"
 COL_MN_NAME   = "BIZLOC_NM"
 COL_ADDR      = "ADDR_1"
 COL_DTL_ADDR  = "DTL_ADDR"
 COL_LAT       = "LATITUDE"
 COL_LON       = "LONGITUDE"
-COL_OPEN      = "Sale start time"
+COL_OPEN      = "SalesStartTime"
 COL_CLOSE     = "SalesCloseTime"
-COL_DRY_CBM   = "Average Order CBM per day (DRY DC)"
-COL_DRY_KG    = "Average Order Weight per day (DRY DC)"
-COL_COLD_CBM  = "Average Order CBM per day (COLD DC)"
-COL_COLD_KG   = "Average Order Weight per day (COLD DC)"
+COL_CITY      = "City"
+
+# Seasonal Average Order Columns
+COL_SUMMER_DRY_CBM  = "Summer Average Order CBM (DRY DC)"
+COL_SUMMER_DRY_KG   = "Summer Average Order Weight (DRY DC)"
+COL_SUMMER_COLD_CBM = "Summer Average Order CBM (COLD DC)"
+COL_SUMMER_COLD_KG  = "Summer Average Order Weight (COLD DC)"
+
+COL_AUTUMN_DRY_CBM  = "Autumn Average Order CBM (DRY DC)"
+COL_AUTUMN_DRY_KG   = "Autumn Average Order Weight (DRY DC)"
+COL_AUTUMN_COLD_CBM = "Autumn Average Order CBM (COLD DC)"
+COL_AUTUMN_COLD_KG  = "Autumn Average Order Weight (COLD DC)"
+
+COL_WINTER_DRY_CBM  = "Winter Average Order CBM (DRY DC)"
+COL_WINTER_DRY_KG   = "Winter Average Order Weight (DRY DC)"
+COL_WINTER_COLD_CBM = "Winter Average Order CBM (COLD DC)"
+COL_WINTER_COLD_KG  = "Winter Average Order Weight (COLD DC)"
+
+COL_SPRING_DRY_CBM  = "Spring Average Order CBM (DRY DC)"
+COL_SPRING_DRY_KG   = "Spring Average Order Weight (DRY DC)"
+COL_SPRING_COLD_CBM = "Spring Average Order CBM (COLD DC)"
+COL_SPRING_COLD_KG  = "Spring Average Order Weight (COLD DC)"
 
 # ── Vehicle Sheet Column Names ──────────────────────────────
 COL_DEPOT        = "Depot"
 COL_TRUCK_ID     = "Truck ID"
+COL_CONTRACTOR   = "Subcontractor"
+COL_TRUCK_NUM    = "Truck Num"
 COL_DESCRIPTION  = "Description"
 COL_CAP_KG       = "Capacity_kg"
 COL_CAP_M3       = "Capacity_m3"
 COL_FUEL_COST    = "Fuel cost per km"
 COL_VEHICLE_COST = "Vehicle cost per day"
 COL_LABOR_COST   = "Labor cost per day"
+
+# ── Dry Route ──────────────────────────────
+COL_DRY_TRUCK_NUM = "Truck number"
+COL_DRY_DIRECTION = "Чиглэл"
+COL_DRY_STORES    = "Салбар дэлгүүрүүд"
+
+# ── Cold Route ──────────────────────────────
+COL_COLD_TRUCK_NUM = "Truck number"
+COL_COLD_DIRECTION = "Чиглэл"
+COL_COLD_STORES    = "Салбар дэлгүүрүүд"
 
 # ── Depot Locations (Ulaanbaatar, Mongolia) ─────────────────
 DEPOTS = {
@@ -56,20 +89,6 @@ DEPOT_VEHICLE_MAP = {
     "Cold DC": "COLD",
 }
 
-# ════════════════════════════════════════════════════════════
-#  Fleet Schedules  (urban only — no overnight rural routes)
-#
-#  DRY DC:  Departs 13:00 → must finish by midnight (11h window).
-#  COLD DC: Departs 03:00 → must finish by 14:00   (11h window).
-#
-#  max_horizon_hour is the OR-Tools planning horizon in hours
-#  AFTER the shift start (not wall-clock).
-#
-#  Examples:
-#    DRY  shift_start=13 → wall 13:00, horizon = 13+11 = 24:00
-#    COLD shift_start=3  → wall 03:00, horizon = 3+11  = 14:00
-# ════════════════════════════════════════════════════════════
-
 FLEET_SCHEDULE = {
     "DRY": {
         "start_hour"      : 13,   # 13:00 departure
@@ -81,65 +100,6 @@ FLEET_SCHEDULE = {
     },
 }
 
-CLUSTERING=False
-
-# ════════════════════════════════════════════════════════════
-#  Clustering Toggle
-#
-#  CLUSTERING = True:
-#    Stores are split into geographic clusters (by angle from depot)
-#    before solving. Each cluster gets a proportional vehicle slice.
-#    ✅ Pros: Faster solve per cluster, scales to large datasets
-#    ⚠️  Cons: Misses cross-cluster optimizations
-#    → Best for: >100 stores
-#
-#  CLUSTERING = False:
-#    All stores solved as one batch with all vehicles.
-#    ✅ Pros: Global optimization, fewer dropped stores
-#    ⚠️  Cons: Slower (exponential growth), needs longer solver time
-#    → Best for: <100 stores, or when comparing quality
-#
-#  Set via env: CLUSTERING=true  or  CLUSTERING=false
-#  Or edit the default here.
-#
-#  Compare results:
-#    CLUSTERING=true  uvicorn main:app &   → run, note cost
-#    CLUSTERING=false uvicorn main:app &   → run, compare cost
-# ════════════════════════════════════════════════════════════
-
-CLUSTERING: bool = os.getenv("CLUSTERING", "false").lower() in ("false", "0", "no")
-MAX_CLUSTERS: int = int(os.getenv("MAX_CLUSTERS", "1"))
-
-# ════════════════════════════════════════════════════════════
-#  Time-Dependent Speed Profiles
-#
-#  Ulaanbaatar traffic is heavy during morning rush (07–09)
-#  and evening rush (17–19).  Free-flow at night.
-#
-#  Factor > 1.0 → faster than base OSRM speed (clear roads)
-#  Factor < 1.0 → slower than base OSRM speed (congestion)
-#
-#  These factors are applied to the OSRM duration matrix:
-#    adjusted_travel_time = osrm_time / speed_factor
-#
-#  So:
-#    DRY  fleet departs at 13:00 → factor=0.85 → 18% slower
-#    COLD fleet departs at 03:00 → factor=1.25 → 25% faster
-#
-#  Effect on routing:
-#    - DRY routes are longer (time) → fewer stops per trip
-#    - COLD routes are shorter (time) → more stops per trip
-#    This matches real Ulaanbaatar operations.
-#
-#  How real systems do this (reference):
-#    Option A (this system): Apply departure-hour factor to base matrix.
-#      Simple, effective, captures fleet-level traffic conditions.
-#    Option B: Precompute 3 matrices (off-peak, AM-peak, PM-peak),
-#      pick correct one per fleet. More accurate but 3× storage.
-#    Option C: Full time-dependent routing (arc cost changes with
-#      departure time of that arc). Most accurate, OR-Tools supports
-#      via RegisterTransitCallback with time state. Very complex.
-# ════════════════════════════════════════════════════════════
 
 HOUR_SPEED_FACTOR: dict = {
     # Hour : speed_multiplier
@@ -197,5 +157,20 @@ OSRM_URL = os.getenv("OSRM_URL", "http://localhost:5000")
 MAX_WEIGHT_FILL_PERCENTAGE = float(os.getenv("MAX_WEIGHT_FILL_PERCENTAGE", "1.0"))  # 100% by default
 MAX_VOLUME_FILL_PERCENTAGE = float(os.getenv("MAX_VOLUME_FILL_PERCENTAGE", "1.0"))  # 100% by default
 
+# ── Season Configuration ─────────────────────────────────────────
+# Default season for optimization (can be overridden from frontend)
+VALID_SEASONS = ["summer", "autumn", "winter", "spring"]
+DEFAULT_SEASON = os.getenv("DEFAULT_SEASON", "summer").lower()
+
 # ── Integer scaling (OR-Tools needs integers) ────────────────
 M3_SCALE = 1000   # m³ × 1000 → integer litres for capacity constraints
+
+# ── Urban / Rural Logic ─────────────────────────────────────
+
+# Urban vehicle restrictions
+URBAN_MAX_CAP_M3 = 15
+URBAN_MAX_CAP_KG = 3000
+
+# Cost bias (NEW STRATEGY)
+CONTRACTOR_COST_MULT = 4.0   # expensive fallback
+FLEET_COST_MULT      = 0.7   # cheap primary

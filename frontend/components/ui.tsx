@@ -652,11 +652,12 @@ export function Pill({label,color}:{label:string;color?:string;}){
 }
 
 /* ── SectionLabel ────────────────────────────────────── */
-export function SectionLabel({label,action}:{label:string;action?:ReactNode;}){
+export function SectionLabel({label,action,extra}:{label:string;action?:ReactNode;extra?:ReactNode}){
   return(
     <div className="flex items-center gap-2 mb-2">
       {action}
       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+      {extra}
     </div>
   );
 }

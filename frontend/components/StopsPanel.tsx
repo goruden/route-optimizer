@@ -11,11 +11,20 @@ export function StopsPanel() {
   const { stopDetails } = s;
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return stopDetails.filter(r =>
-      (fleetF === "ALL" || r.fleet === fleetF) &&
-      (!q || r.store_id.toLowerCase().includes(q) || r.eng_name?.toLowerCase().includes(q) ||
-       r.mn_name?.toLowerCase().includes(q) || r.truck_id.toLowerCase().includes(q))
-    );
+    return stopDetails
+      .filter(r =>
+        (fleetF === "ALL" || r.fleet === fleetF) &&
+        (!q || r.store_id.toLowerCase().includes(q) || r.eng_name?.toLowerCase().includes(q) ||
+         r.mn_name?.toLowerCase().includes(q) || r.truck_id.toLowerCase().includes(q) ||
+         (r.truck_num && r.truck_num.toLowerCase().includes(q)) ||
+         (r.contractor && r.contractor.toLowerCase().includes(q)))
+      )
+      .sort((a, b) => {
+        const fleetOrder = a.fleet === b.fleet ? 0 : a.fleet === "DRY" ? -1 : 1;
+        if (fleetOrder !== 0) return fleetOrder;
+        const naturalSort = (str: string) => str.replace(/(\d+)/g, (match) => match.padStart(10, '0'));
+        return naturalSort(a.truck_id).localeCompare(naturalSort(b.truck_id));
+      });
   }, [stopDetails, search, fleetF]);
 
   if (!stopDetails.length) return (
@@ -48,7 +57,7 @@ export function StopsPanel() {
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10 bg-slate-100">
             <tr>
-              {["Fleet","Truck","Trip","#","Store ID","Name EN","Name MN","Address","Arrival","Departure","Day","kg","m³"].map(h => (
+              {["Fleet","Truck ID","Truck #","Contractor","Trip","#","Store ID","Name EN","Name MN","Address","Arrival","Departure","Day","kg","m³"].map(h => (
                 <th key={h} className="px-3 py-2.5 text-left whitespace-nowrap">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{h}</span>
                 </th>
@@ -62,6 +71,14 @@ export function StopsPanel() {
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.fleet==="DRY"?"bg-orange-200 text-orange-600":"bg-sky-100 text-sky-600"}`}>{r.fleet}</span>
                 </td>
                 <td className="px-3 py-2 font-mono text-[11px] font-semibold">{r.truck_id}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.truck_num || "—"}</td>
+                <td className="px-3 py-2">
+                  {r.contractor === "Fleet" ? (
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">{r.contractor}</span>
+                  ) : (
+                    <span className="text-[11px] text-slate-600">{r.contractor || "—"}</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">T{r.trip_number}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.stop_order}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.store_id}</td>

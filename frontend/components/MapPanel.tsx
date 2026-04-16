@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useApp, buildBadges } from "@/lib/state";
 import { fmtSec } from "@/lib/api";
 import type { Store, StopDetail, MapRoute } from "@/types/vrp";
@@ -46,6 +46,10 @@ export default function MapPanel() {
   const [routeControlCollapsed, setRouteControlCollapsed] = useState(false);
   const [badgesVisible, setBadgesVisible] = useState(false);
   const [storesMode, setStoresMode] = useState<"all" | "routes">("all");
+  const [search, setSearch] = useState("");
+  const [suggestions, setSuggestions] = useState<Store[]>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
 
   /* stable ref so Leaflet callbacks never go stale */
   const openRef = useRef<(nodeId: string) => void>(() => { });
@@ -58,6 +62,7 @@ export default function MapPanel() {
       setDrawerDels(s.stopDetails.filter(dd => dd.store_id === found.store_id));
       setDrawerOpen(true);
       setRouteControlCollapsed(true); // Collapse route control when shop opens
+      setSelectedStoreId(found.store_id); // Highlight store when drawer opens
       d({ t: "SET_SEL", v: nodeId });
     };
   }, [s.stores, s.stopDetails, d]);
@@ -100,6 +105,18 @@ export default function MapPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ── searchable store list ─────────────────────────────── */
+  const effectiveStores: Store[] = useMemo(() => {
+    if (stores.length > 0) return stores;
+    const seen = new Set<string>();
+    return stopDetails.flatMap(dd => {
+      if (seen.has(dd.store_id)) return [];
+      seen.add(dd.store_id);
+      const st = synthStore(dd.store_id, stopDetails);
+      return st ? [st] : [];
+    });
+  }, [stores, stopDetails]);
+
   /* ── store markers — rebuilds when visibility/filter changes ── */
   useEffect(() => {
     if (!mapInst.current || !inited.current) return;
@@ -109,16 +126,6 @@ export default function MapPanel() {
     storeLyr.current.forEach(m => map.removeLayer(m));
     storeLyr.current.clear();
 
-    /* either real stores or synthesised from stop details */
-    const effectiveStores: Store[] = stores.length > 0 ? stores : (() => {
-      const seen = new Set<string>();
-      return stopDetails.flatMap(dd => {
-        if (seen.has(dd.store_id)) return [];
-        seen.add(dd.store_id);
-        const st = synthStore(dd.store_id, stopDetails);
-        return st ? [st] : [];
-      });
-    })();
     if (!effectiveStores.length) return;
 
     // const badgeMap = buildBadges(stopDetails, mapData, routeVis, fleetFilter);
@@ -138,13 +145,14 @@ export default function MapPanel() {
       // const showBadges = zoom >= 15;
       const showBadges = badgesVisible;
 
+      const isSearched = st.store_id === selectedStoreId;
       let icon;
 
       if (showBadges && isActive) {
         const badges = buildBadges(stopDetails, mapData, routeVis, fleetFilter)[st.store_id] ?? [];
         icon = smartBadgeIcon(badges);
       } else {
-        icon = simpleStoreIcon(st, isActive);
+        icon = simpleStoreIcon(st, isActive, isSearched);
       }
 
       const { html, size, anchor } = icon;
@@ -154,7 +162,7 @@ export default function MapPanel() {
       storeLyr.current.set(st.node_id, mk);
     });
     /* NO fitBounds — map never auto-zooms */
-  }, [stores, stopDetails, mapData, routeVis, fleetFilter, activeJobId, badgesVisible, storesMode]);
+  }, [stores, stopDetails, mapData, routeVis, fleetFilter, activeJobId, badgesVisible, storesMode, selectedStoreId]);
 
   /* ── route polylines ───────────────────────────────── */
   useEffect(() => {
@@ -175,7 +183,7 @@ export default function MapPanel() {
         dashArray: route.line_style === "dashed" ? "8,5" : undefined,
         lineCap: "round", lineJoin: "round",
       }).addTo(map)
-        .bindPopup(`<div style="font-family:Inter,sans-serif"><b style="color:${route.color}">${route.fleet} · ${route.truck_id} T${route.trip_number}</b><div style="font-size:11px;color:#7B82A0;margin:3px 0">${route.sched_info}</div><div style="font-size:11px">🏪 ${route.stops.length} · 📏 ${route.summary.distance_km}km · ⏱ ${route.summary.duration_min}min</div></div>`);
+        .bindPopup(`<div style="font-family:Inter,sans-serif"><b style="color:${route.color}">${route.fleet} · ${route.truck_id}${route.truck_num ? ` (${route.truck_num})` : ""}${route.contractor ? ` · ${route.contractor}` : ""} T${route.trip_number}</b><div style="font-size:11px;color:#7B82A0;margin:3px 0">${route.sched_info}</div><div style="font-size:11px">🏪 ${route.stops.length} · 📏 ${route.summary.distance_km}km · ⏱ ${route.summary.duration_min}min</div></div>`);
 
       const dots: any[] = route.stops.map(stop => {
         // Small coloured dot — no trip-number label, but fully clickable.
@@ -207,6 +215,59 @@ export default function MapPanel() {
     });
   }, [routeVis, fleetFilter, mapData]);
 
+  /* ── search logic ─────────────────────────────────────── */
+  useEffect(() => {
+    if (!search.trim()) {
+      setSuggestions([]);
+      return;
+    }
+
+    const q = search.toLowerCase();
+
+    const res = effectiveStores
+      .filter(st =>
+        st.store_id.toLowerCase().includes(q) ||
+        st.eng_name?.toLowerCase().includes(q) ||
+        st.mn_name?.toLowerCase().includes(q)
+      )
+      .slice(0, 8); // limit suggestions
+
+    setSuggestions(res);
+  }, [search, effectiveStores]);
+
+  /* ── close suggestions on map click ────────────────────── */
+  useEffect(() => {
+    if (!mapInst.current) return;
+    const map = mapInst.current;
+    const close = () => setShowSuggest(false);
+    const clear = () => {
+      if (!drawerOpen) setSelectedStoreId(null);
+    };
+    map.on("click", close);
+    map.on("click", clear);
+    return () => {
+      map.off("click", close);
+      map.off("click", clear);
+    };
+  }, [drawerOpen]);
+
+  /* ── focus store function ─────────────────────────────── */
+  function focusStore(st: Store) {
+    if (!mapInst.current) return;
+
+    mapInst.current.setView([st.lat, st.lon], 16, {
+      animate: true,
+      duration: 0.5,
+    });
+
+    openRef.current(st.node_id);
+
+    setSelectedStoreId(st.store_id);
+
+    setShowSuggest(false);
+    setSearch("");
+  }
+
   return (
     <div className="w-full h-full relative overflow-hidden">
       <div ref={mapRef} className="w-full h-full" />
@@ -222,9 +283,46 @@ export default function MapPanel() {
         </div>
       )}
 
+      {/* search bar */}
+      {(s.activeDatasetId || activeJobId) && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-1000 w-72">
+          <div className="relative">
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setShowSuggest(true);
+              }}
+              placeholder="Search store..."
+              className="w-full px-3 py-2 text-sm rounded-2xl border border-slate-200 shadow bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
+            />
+
+            {/* suggestions */}
+            {showSuggest && suggestions.length > 0 && (
+              <div className="absolute mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-64 overflow-auto">
+                {suggestions.map(st => (
+                  <button
+                    key={st.store_id}
+                    onClick={() => focusStore(st)}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-50 flex flex-col"
+                  >
+                    <span className="text-[12px] font-bold text-slate-800">
+                      {st.eng_name || st.store_id}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      #{st.store_id} {st.mn_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {mapData.length > 0 && <RouteControlPanel collapsed={routeControlCollapsed} setCollapsed={setRouteControlCollapsed} badgesVisible={badgesVisible} setBadgesVisible={setBadgesVisible} storesMode={storesMode} setStoresMode={setStoresMode} />}
       <StoreDrawer store={drawerStore} dels={drawerDels} open={drawerOpen} mapData={mapData}
-        onClose={() => { setDrawerOpen(false); setRouteControlCollapsed(false); d({ t: "SET_SEL", v: null }); }} />
+        onClose={() => { setDrawerOpen(false); setRouteControlCollapsed(false); setSelectedStoreId(null); d({ t: "SET_SEL", v: null }); }} />
     </div>
   );
 }
@@ -243,7 +341,13 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
   const { s, d } = useApp();
   const { mapData, routeVis, fleetFilter } = s;
 
-  const visible = fleetFilter === "ALL" ? mapData : mapData.filter(r => r.fleet === fleetFilter);
+  const visible = (fleetFilter === "ALL" ? mapData : mapData.filter(r => r.fleet === fleetFilter))
+    .sort((a, b) => {
+      const fleetOrder = a.fleet === b.fleet ? 0 : a.fleet === "DRY" ? -1 : 1;
+      if (fleetOrder !== 0) return fleetOrder;
+      const naturalSort = (str: string) => str.replace(/(\d+)/g, (match) => match.padStart(10, '0'));
+      return naturalSort(a.truck_id).localeCompare(naturalSort(b.truck_id));
+    });
   const allOn = visible.every(r => routeVis[r.route_id] !== false);
 
   return (
@@ -327,10 +431,10 @@ function RouteControlPanel({ collapsed, setCollapsed, badgesVisible, setBadgesVi
                   style={{ opacity: on ? 1 : 0.35 }}>
                   <div className="w-7 h-1 rounded-full shrink-0" style={{ background: route.color }} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-bold text-slate-900 truncate">
-                      {route.truck_id}<span className="font-normal text-slate-500 ml-1">Х{route.trip_number}</span>
+                    <div className="font-bold text-[12px] text-slate-800">
+                      {route.truck_id}{route.truck_num ? ` (${route.truck_num})` : ""}<span className="font-normal text-slate-500 ml-1">Х{route.trip_number}</span>
                     </div>
-                    <div className="text-[9px] text-slate-500">{route.fleet} · {route.stops.length} зогсоол · {route.summary.distance_km}km</div>
+                    <div className="text-[9px] text-slate-500">{route.fleet} · {route.contractor || ""} · {route.stops.length} зогсоол · {route.summary.distance_km}km</div>
                   </div>
                   <span className="text-[13px] shrink-0">{on ? <SeeIcon /> : <UnseeIcon />}</span>
                 </button>
@@ -430,6 +534,21 @@ function InfoTab({ store }: { store: Store }) {
           {store.has_cold && <DBar label="COLD volume" val={store.cold_cbm} unit="m³" color="#0EA5E9" max={20} />}
         </Card>
       )}
+      {store.seasonal_data && (
+        <Card title={<><BalanceIcon size="size-4" className="inline mr-1" />Улиралын эрэлт</>}>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(store.seasonal_data).map(([season, data]: [string, any]) => (
+              <div key={season} className="bg-slate-50 rounded-lg p-2">
+                <div className="text-[11px] font-bold text-slate-700 capitalize mb-1">{season}</div>
+                <div className="text-[10px] text-slate-500 space-y-0.5">
+                  <div>DRY: {data.dry_kg.toFixed(0)}kg / {data.dry_cbm.toFixed(2)}m³</div>
+                  <div>COLD: {data.cold_kg.toFixed(0)}kg / {data.cold_cbm.toFixed(2)}m³</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -468,7 +587,7 @@ function DeliveryTab({ dels, fleet, mapData }: { dels: StopDetail[]; fleet: "DRY
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-[3px] shrink-0" style={{ background: rc }} />
-                    <span className="text-[12px] font-bold flex items-center gap-1" style={{ color: rc }}> <VehicleIcon /> {dd.truck_id} · Хүргэлт {dd.trip_number}</span>
+                    <span className="text-[12px] font-bold flex items-center gap-1" style={{ color: rc }}> <VehicleIcon /> {dd.truck_id}{dd.truck_num ? ` (${dd.truck_num})` : ""}{dd.contractor ? ` · ${dd.contractor}` : ""} · Хүргэлт {dd.trip_number}</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: rc + "18", color: rc }}>Зогсоол #{dd.stop_order}</span>
                 </div>
@@ -552,24 +671,37 @@ function DPill({ icon, label, val }: { icon: React.ReactNode; label: string; val
 }
 
 /* ── store marker HTML ───────────────────────────────── */
-function simpleStoreIcon(st: Store, isActive: boolean) {
+function simpleStoreIcon(st: Store, isActive: boolean, isSearched: boolean = false) {
   // default = small neutral
   let color = "#BD4AFF"; // gray
+  let size = 8;
+  let borderWidth = 2;
+  let shadow = "0 1px 4px rgba(0,0,0,0.2)";
 
   // active route store = green
   if (isActive) color = "#30C21F";
 
+  // searched store = larger, red with pulsing effect
+  if (isSearched) {
+    color = "#EF4444";
+    size = 16;
+    borderWidth = 3;
+    shadow = "0 0 0 4px rgba(239,68,68,0.3), 0 4px 12px rgba(239,68,68,0.4)";
+  }
+
   return {
     html: `<div style="
-      width: 8px;
-      height: 8px;
+      width: ${size}px;
+      height: ${size}px;
       border-radius:50%;
       background:${color};
-      border:2px solid #fff;
-      box-shadow:0 1px 4px rgba(0,0,0,0.2);
-    "></div>`,
-    size: [8, 8] as [number, number],
-    anchor: [4, 4] as [number, number],
+      border:${borderWidth}px solid #fff;
+      box-shadow:${shadow};
+    ${isSearched ? 'animation:pulse 2s infinite;' : ''}
+    "></div>
+    ${isSearched ? '<style>@keyframes pulse{0%{transform:scale(1);}50%{transform:scale(1.1);}100%{transform:scale(1);}}</style>' : ''}`,
+    size: [size, size] as [number, number],
+    anchor: [size / 2, size / 2] as [number, number],
   };
 }
 

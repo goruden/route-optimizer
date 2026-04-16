@@ -23,6 +23,8 @@ export interface RouteEntry {
   uid: string;
   vehicleId: string;
   routeName: string;
+  truckNumber?: string;  // Original truck number from import
+  direction?: string;
   stops: StopEntry[];
 }
 
@@ -138,6 +140,144 @@ function isSequentialFormat(data: any[]): boolean {
   if (keys.some((k) => k.includes("car number") || k.includes("car"))) return true;
   const firstVal = String(Object.values(data[0])[0] ?? "");
   return firstVal.includes("||");
+}
+
+function isMongolianFormat(data: any[]): boolean {
+  if (!data.length) return false;
+  const keys = Object.keys(data[0]);
+  const lowerKeys = keys.map((k) => String(k).toLowerCase());
+  // Check for Mongolian column headers
+  return lowerKeys.some((k) => k.includes("truck") && k.includes("number")) &&
+         lowerKeys.some((k) => k.includes("чиглэл") || k.includes("direction")) &&
+         lowerKeys.some((k) => k.includes("салбар") || k.includes("store"));
+}
+
+function parseMongolianFormat(data: any[], vehicles: Vehicle[], stores: Store[]): { routes: RouteEntry[]; warnings: string[] } {
+  const routes: RouteEntry[] = [], warnings: string[] = [];
+  const storeByRaw = new Map<string, Store>(), storeByNorm = new Map<string, Store>();
+
+  for (const s of stores) { storeByRaw.set(s.store_id.trim(), s); storeByNorm.set(normalizeStoreId(s.store_id), s); }
+
+  // Parse multi-row format where truck + direction on one row, store IDs on subsequent rows
+  let currentTrucks: string[] = [];
+  let currentDirection = "";
+  let currentStoreIds: string[] = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const keys = Object.keys(row);
+    const truckKey = keys.find(k => k.toLowerCase().includes("truck") && k.toLowerCase().includes("number")) || "Truck number";
+    const directionKey = keys.find(k => k.toLowerCase().includes("чиглэл") || k.toLowerCase().includes("direction")) || "Чиглэл";
+    const storesKey = keys.find(k => k.toLowerCase().includes("салбар") || k.toLowerCase().includes("store")) || "Салбар дэлгүүрүд";
+
+    const truckCell = String(row[truckKey] ?? "").trim();
+    const directionCell = String(row[directionKey] ?? "").trim();
+    const storesCell = String(row[storesKey] ?? "").trim();
+
+    // Check if this is a truck row (has truck number)
+    if (truckCell) {
+      // Flush previous route if exists
+      if (currentTrucks.length > 0 && currentStoreIds.length > 0) {
+        processTrucks(currentTrucks, currentDirection, currentStoreIds, vehicles, stores, storeByRaw, storeByNorm, routes, warnings);
+      }
+
+      // Parse truck numbers (space-separated for multiple trucks)
+      currentTrucks = truckCell.split(/\s+/).map(t => t.trim()).filter(t => t);
+      currentDirection = directionCell;
+      currentStoreIds = [];
+    }
+
+    // Collect store IDs from stores column (even if empty, check for numeric values)
+    if (storesCell !== undefined && storesCell !== null) {
+      const storeIds = storesCell
+        .split(/[\n,;\s]+/)
+        .map(s => s.trim())
+        .filter(s => s && s !== "0");
+      currentStoreIds.push(...storeIds);
+    }
+
+    // Also check all other columns for store IDs (in case they're in a different column)
+    for (const key of keys) {
+      if (key === truckKey || key === directionKey || key === storesKey) continue;
+      const cellValue = row[key];
+      if (cellValue !== undefined && cellValue !== null && cellValue !== "") {
+        const strValue = String(cellValue).trim();
+        if (strValue && strValue !== "0" && /^\d+$/.test(strValue)) {
+          currentStoreIds.push(strValue);
+        }
+      }
+    }
+  }
+
+  // Flush last route
+  if (currentTrucks.length > 0 && currentStoreIds.length > 0) {
+    processTrucks(currentTrucks, currentDirection, currentStoreIds, vehicles, stores, storeByRaw, storeByNorm, routes, warnings);
+  } else if (currentTrucks.length > 0 && currentStoreIds.length === 0) {
+    warnings.push(`No stores found for trucks: ${currentTrucks.join(", ")}`);
+  }
+
+  return { routes, warnings };
+}
+
+function processTrucks(
+  truckNums: string[],
+  direction: string,
+  storeIds: string[],
+  vehicles: Vehicle[],
+  stores: Store[],
+  storeByRaw: Map<string, Store>,
+  storeByNorm: Map<string, Store>,
+  routes: RouteEntry[],
+  warnings: string[]
+) {
+  // Find all vehicles for the truck numbers
+  const foundVehicles: Vehicle[] = [];
+  for (const truckNum of truckNums) {
+    // Normalize truck number by removing common suffixes
+    const normalizedTruckNum = truckNum.replace(/\s*(УКМ|УКР|УЕТ)$/i, "").trim();
+
+    const vehicle = vehicles.find((v) => {
+      const normalizedVehId = v.truck_id.trim().replace(/\s*(УКМ|УКР|УЕТ)$/i, "").trim();
+      return normalizedVehId.includes(normalizedTruckNum) ||
+             normalizedTruckNum.includes(normalizedVehId) ||
+             (v.truck_num && v.truck_num.toString().includes(normalizedTruckNum));
+    });
+
+    if (vehicle) {
+      foundVehicles.push(vehicle);
+    } else {
+      warnings.push(`Vehicle "${truckNum}" (normalized: "${normalizedTruckNum}") not found`);
+    }
+  }
+
+  if (foundVehicles.length === 0) return;
+
+  // Parse stores
+  const stops: StopEntry[] = [];
+  for (const storeId of storeIds) {
+    const store = storeByRaw.get(storeId) ?? storeByNorm.get(normalizeStoreId(storeId));
+    if (!store) {
+      warnings.push(`Store "${storeId}" not found`);
+      continue;
+    }
+    stops.push(storeToStop(store, foundVehicles[0].fleet || "DRY"));
+  }
+
+  if (stops.length === 0) {
+    warnings.push(`No valid stores for trucks: ${truckNums.join(", ")}`);
+    return;
+  }
+
+  // Create one route per direction using the first found vehicle
+  const primaryVehicle = foundVehicles[0];
+  routes.push({
+    uid: mkuid(),
+    vehicleId: primaryVehicle.truck_id,
+    routeName: direction || `${primaryVehicle.truck_id} Imported`,
+    truckNumber: truckNums.join(" "),  // Store original truck number(s) from import
+    direction: direction,
+    stops: [...stops],
+  });
 }
 
 function parseSequentialFormat(data: any[], vehicles: Vehicle[], stores: Store[]): { routes: RouteEntry[]; warnings: string[] } {
@@ -336,6 +476,14 @@ function RouteCard({ route, index, vehicles, stores, onRemove, onVehicleChange, 
       <div className="flex rounded-t-xl items-center gap-2.5 px-3 py-2" style={{ background: bgColor }}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[15px] font-extrabold text-white shrink-0 shadow-sm" style={{ background: fleetColor }}>
           {vehicle?.truck_id?.slice(0, 3) || "?"}
+        </div>
+        <div className="flex flex-col">
+          {route.truckNumber && (
+            <div className="text-[9px] font-semibold text-slate-600 mt-1 truncate bg-slate-100 rounded-lg px-2 py-1 text-center">{route.truckNumber}</div>
+          )}
+          {route.direction && (
+            <div className="text-[9px] font-semibold text-slate-600 mt-1 truncate px-2">{route.direction}</div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <select value={route.vehicleId} onChange={(e) => onVehicleChange(e.target.value)}
@@ -556,15 +704,15 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
 
   async function importFile() {
     if (!dsId) { showToast("Please select a dataset first", "error"); return; }
-    
+
     // Add a small delay to ensure vehicles/stores are loaded
-    if (dataLoading || vehicles.length === 0 || stores.length === 0) { 
+    if (dataLoading || vehicles.length === 0 || stores.length === 0) {
       setTimeout(() => {
         if (vehicles.length === 0 || stores.length === 0) {
-          showToast("Dataset still loading - please wait", "error"); 
+          showToast("Dataset still loading - please wait", "error");
         }
       }, 500);
-      return; 
+      return;
     }
     const input = document.createElement("input");
     input.type = "file"; input.accept = ".csv,.xlsx";
@@ -572,11 +720,24 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       try {
-        let data: any[] = [];
+        let allData: any[] = [];
         if (file.name.endsWith(".xlsx")) {
           const buffer = await file.arrayBuffer();
           const wb = XLSX.read(buffer, { type: "array" });
-          data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+
+          // Import from Dry DC and Cold DC sheets if they exist
+          const targetSheets = ["Dry DC", "Cold DC"];
+          for (const sheetName of targetSheets) {
+            if (wb.SheetNames.includes(sheetName)) {
+              const sheetData = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "" });
+              allData = allData.concat(sheetData);
+            }
+          }
+
+          // If no target sheets found, use first sheet
+          if (allData.length === 0) {
+            allData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+          }
         } else {
           const text = await file.text();
           const lines = text.trim().split("\n");
@@ -586,15 +747,19 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
             const values = lines[i].split(delimiter).map((v) => v.trim());
             const row: any = {};
             headers.forEach((header, index) => { row[header] = values[index] ?? ""; });
-            data.push(row);
+            allData.push(row);
           }
         }
-        if (!data.length) { showToast("No data found in file", "error"); return; }
-        const result = isSequentialFormat(data)
-          ? parseSequentialFormat(data, vehicles, stores)
-          : parseTabularFormat(data, vehicles, stores);
+        if (!allData.length) { showToast("No data found in file", "error"); return; }
 
-        if (!result.routes.length) { showToast("No valid routes found", "error"); return; }
+        // Parse only once
+        const result = isMongolianFormat(allData)
+          ? parseMongolianFormat(allData, vehicles, stores)
+          : isSequentialFormat(allData)
+          ? parseSequentialFormat(allData, vehicles, stores)
+          : parseTabularFormat(allData, vehicles, stores);
+
+        if (!result.routes.length) { setImportWarnings(result.warnings); showToast("No valid routes found", "error"); return; }
         setRoutes((prev) => [...prev, ...result.routes]);
         setImportWarnings(result.warnings);
         showToast(`Imported ${result.routes.length} routes · ${result.routes.reduce((a, r) => a + r.stops.length, 0)} stops`, "success");
@@ -648,7 +813,22 @@ export function RouteBuilderModal({ open, onClose, initialRoutes = [], initialTi
     }
     setLoading(true);
     try {
-      const newJob = await api.createManualJob({ title: title.trim(), routes: routes.map((r) => ({ vehicle_id: r.vehicleId, vehicle_name: getVehicleLabel(r.vehicleId, vehicles), stops: r.stops.map((s) => s.storeId), route_name: r.routeName })), is_manual: true, dataset_id: dsId });
+      const newJob = await api.createManualJob({
+        title: title.trim(),
+        routes: routes.map((r) => {
+          const vehicle = vehicles.find((v) => v.truck_id === r.vehicleId);
+          return {
+            vehicle_id: r.vehicleId,
+            vehicle_name: getVehicleLabel(r.vehicleId, vehicles),
+            stops: r.stops.map((s) => s.storeId),
+            route_name: r.routeName,
+            truck_number: r.truckNumber,
+            contractor: vehicle?.contractor,
+          };
+        }),
+        is_manual: true,
+        dataset_id: dsId,
+      });
       if (groupId !== "none") await api.patchJobVersion(newJob.id, { group_id: groupId }).catch(() => {});
       const result = await api.getJobResult(newJob.id);
       d({ t: "SET_RESULT", jobId: newJob.id, r: result });
