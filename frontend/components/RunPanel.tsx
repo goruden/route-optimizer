@@ -274,8 +274,8 @@ export function RunPanel(){
                     <div className="text-[9px] text-slate-400">Хүргэлт + Агуулах</div>
                   </div>
                   <div className="relative">
-                    <input type="number" value={time} min={1} max={600} //! add disabled
-                      onChange={e => setTime(Math.max(1, Math.min(600, Number(e.target.value))))}
+                    <input type="number" value={time} min={1} max={9999} //! add disabled
+                      onChange={e => setTime(Math.max(1, Math.min(9999, Number(e.target.value))))}
                       className="w-14 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-red-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 font-medium pointer-events-none">s</span>
                   </div>
@@ -413,16 +413,21 @@ export function RunPanel(){
               <p className="text-[11px] text-slate-500 mb-2">Changes apply to current run only (reset after reload)</p>
               
               {[
-                { key: "SERVICE_TIME_SECONDS", label: "Service Time (seconds)", type: "number", default: 600 },
-                { key: "RELOAD_TIME_SECONDS", label: "Reload Time (seconds)", type: "number", default: 1800 },
-                { key: "PENALTY_UNSERVED", label: "Penalty Unserved", type: "number", default: 10000000000 },
-                { key: "VEHICLE_FIXED_COST", label: "Vehicle Fixed Cost", type: "number", default: 5000 },
-                { key: "M3_SCALE", label: "M3 Scale", type: "number", default: 1000 },
+                { key: "SERVICE_TIME_SECONDS", label: "Бараа өгөх хугацаа (seconds)", type: "number", default: 600 },
+                { key: "RELOAD_TIME_SECONDS", label: "Бараа дүүргэх хугацаа (seconds)", type: "number", default: 1800 },
+                { key: "PENALTY_UNSERVED", label: "Хүргэлт хийхгүй байх шийтгэл", type: "number", default: 10000000000 },
+                { key: "VEHICLE_FIXED_COST", label: "Тээврийн хэрэгсэл дахин ашиглах өртөг", type: "number", default: 5000 },
                 { key: "BALANCED_SPAN_COEFF", label: "Balanced Span Coeff", type: "number", default: 300 },
-                { key: "DRY_START_HOUR", label: "DRY Start Hour", type: "number", default: 13 },
-                { key: "DRY_MAX_HORIZON_HOUR", label: "DRY Max Horizon Hour", type: "number", default: 24 },
-                { key: "COLD_START_HOUR", label: "COLD Start Hour", type: "number", default: 3 },
-                { key: "COLD_MAX_HORIZON_HOUR", label: "COLD Max Horizon Hour", type: "number", default: 14 },
+                { key: "MAX_TRIPS_PER_VEHICLE", label: "Тээврийн хэрэгсэл цэнэглэх тоо", type: "number", default: 2 },
+                { key: "FAR_THRESHOLD_KM", label: "Хол түгээлтийн хязгаар (km)", type: "number", default: 1000 },
+                { key: "URBAN_MAX_CAP_M3", label: "Хот доторх эзэлхүүний хязгаарлалт m³", type: "number", default: 15 },
+                { key: "URBAN_MAX_CAP_KG", label: "Хот доторх массын хязгаарлалт kg", type: "number", default: 3000 },
+                { key: "CONTRACTOR_COST_MULT", label: "Гадны түгээлтийн өртгийн коэффициент", type: "number", default: 4.0 },
+                { key: "FLEET_COST_MULT", label: "Fleet түгээлтийн өртгийн коэффициент", type: "number", default: 0.7 },
+                { key: "DRY_START_HOUR", label: "DRY эхлэх цаг", type: "number", default: 13 },
+                { key: "DRY_MAX_HORIZON_HOUR", label: "DRY хамгийн их зарцуулах хугацаа (цаг)", type: "number", default: 24 },
+                { key: "COLD_START_HOUR", label: "COLD эхлэх цаг", type: "number", default: 3 },
+                { key: "COLD_MAX_HORIZON_HOUR", label: "COLD хамгийн их зарцуулах хугацаа (цаг)", type: "number", default: 14 },
               ].map((cfg) => (
                 <div key={cfg.key} className="flex items-center justify-between py-2 border-b border-slate-100">
                   <div className="flex-1">
