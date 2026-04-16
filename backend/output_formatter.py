@@ -1,7 +1,6 @@
 # ============================================================
 #  output_formatter.py  –  Build API responses & Excel export
-#  v6: Rural-specific styling removed (all routes are urban now).
-#      "has_rural" / "is_rural" fields default to False safely.
+#  Urban/rural is now defined by City column (UB = urban, anything else = rural).
 # ============================================================
 
 import io
@@ -92,8 +91,12 @@ def build_route_summary(solver_result: Dict) -> List[Dict]:
             summaries.append({
                 "fleet"        : str(fleet),
                 "truck_id"     : str(route["truck_id"]),
+                "truck_num"    : str(route["vehicle"].get("truck_num", "")),
+                "contractor"   : str(route["vehicle"].get("contractor", "")),
+                "description"  : str(route["vehicle"].get("description", "")),
+                "fuel_cost_km" : _f(route["vehicle"].get("fuel_cost_km", 0)),
                 "trip_number"  : _i(route["trip_number"]),
-                "route_type"   : "🏙 Urban",  # rural removed in v6
+                "route_type"   : "🏙 Urban",  # TODO: could determine based on City column of stores in route
                 "stops"        : _i(len(route["stops"])),
                 "distance_km"  : round(dist_m / 1000, 2),
                 "duration_min" : round(dur_s / 60, 1),
@@ -132,6 +135,8 @@ def build_stop_details(solver_result: Dict) -> List[Dict]:
                 stops_out.append({
                     "fleet"       : str(fleet),
                     "truck_id"    : str(route["truck_id"]),
+                    "truck_num"   : str(route["vehicle"].get("truck_num", "")),
+                    "contractor"  : str(route["vehicle"].get("contractor", "")),
                     "trip_number" : _i(route["trip_number"]),
                     "stop_order"  : _i(order),
                     "store_id"    : str(s["store_id"]),
@@ -244,6 +249,8 @@ def build_map_data(solver_result: Dict, route_geometries: Dict) -> List[Dict]:
                 "route_id"    : rid,
                 "fleet"       : fleet,
                 "truck_id"    : route["truck_id"],
+                "truck_num"   : str(route["vehicle"].get("truck_num", "")),
+                "contractor"  : str(route["vehicle"].get("contractor", "")),
                 "trip_number" : route["trip_number"],
                 "is_rural"    : False,
                 "color"       : color,
@@ -313,7 +320,7 @@ def export_to_excel(
     ws1 = wb.active
     ws1.title = "Route Summary"
     h1 = [
-        "Fleet","Truck","Trip","Departs","Returns","Stops",
+        "Fleet","Truck ID","Truck #","Contractor","Trip","Departs","Returns","Stops",
         "Dist (km)","Duration (min)",
         "Load kg","Cap kg","Util kg %",
         "Load m³","Cap m³","Util m³ %",
@@ -323,7 +330,7 @@ def export_to_excel(
 
     for i, r in enumerate(route_summary, 1):
         row = [
-            r["fleet"], r["truck_id"], r["trip_number"],
+            r["fleet"], r["truck_id"], r.get("truck_num", ""), r.get("contractor", ""), r["trip_number"],
             r.get("departs_at", ""), r.get("returns_at", ""),
             r["stops"], r["distance_km"], r["duration_min"],
             r["load_kg"], r["cap_kg"], r["util_kg_pct"],
@@ -338,7 +345,7 @@ def export_to_excel(
     # ── Sheet 2: Stop Details ────────────────────────────────
     ws2 = wb.create_sheet("Stop Details")
     h2 = [
-        "Fleet","Truck","Trip","#",
+        "Fleet","Truck ID","Truck #","Contractor","Trip","#",
         "Store ID","Eng Name","MN Name","Address","Detail Address",
         "Lat","Lon","Arrival","Departure","Delivery Day",
         "Demand kg","Demand m³"
@@ -347,7 +354,7 @@ def export_to_excel(
 
     for i, r in enumerate(stop_details, 1):
         row = [
-            r["fleet"], r["truck_id"], r["trip_number"], r["stop_order"],
+            r["fleet"], r["truck_id"], r.get("truck_num", ""), r.get("contractor", ""), r["trip_number"], r["stop_order"],
             r["store_id"], r["eng_name"], r["mn_name"],
             r["address"], r.get("detail_addr", ""),
             r["lat"], r["lon"],

@@ -2,7 +2,7 @@
 #  main.py  –  FastAPI + MongoDB backend  v3
 # ============================================================
 
-import datetime, json, logging, os, uuid
+import datetime, json, logging, os, uuid, copy
 from contextlib import asynccontextmanager
 from typing import Optional
 import numpy as np
@@ -236,7 +236,7 @@ async def create_dataset(
     matrix_bytes = await matrix_file.read() if matrix_file else None
 
     try:
-        stores_list   = data_loader.load_stores(store_bytes)
+        stores_list, import_warnings = data_loader.load_stores(store_bytes, "summer")
         vehicles_list = data_loader.load_vehicles(store_bytes)
     except Exception as e:
         raise HTTPException(422, f"Parse error: {e}")
@@ -303,6 +303,8 @@ async def export_dataset(dataset_id: str,
                          db: AsyncIOMotorDatabase = Depends(get_db)):
     import pandas as pd
     import io as _io
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
 
     ds = await db[DatasetDoc.COLLECTION].find_one({"_id": dataset_id})
     if not ds:
@@ -314,22 +316,71 @@ async def export_dataset(dataset_id: str,
     def fmt_time(s: int) -> str:
         return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:00"
 
-    stores_data = [{
-        config.COL_STORE_ID  : s["store_id"],
-        config.COL_ENG_NAME  : s.get("eng_name", ""),
-        config.COL_MN_NAME   : s.get("mn_name", ""),
-        config.COL_ADDR      : s.get("address", ""),
-        config.COL_DTL_ADDR  : s.get("detail_addr", ""),
-        config.COL_LAT       : s["lat"],
-        config.COL_LON       : s["lon"],
-        config.COL_OPEN      : fmt_time(s["open_s"]),
-        config.COL_CLOSE     : fmt_time(s["close_s"]),
-        config.COL_DRY_CBM   : s["dry_cbm"],
-        config.COL_DRY_KG    : s["dry_kg"],
-        config.COL_COLD_CBM  : s["cold_cbm"],
-        config.COL_COLD_KG   : s["cold_kg"],
-    } for s in stores]
+    # Create workbook with multi-level headers for seasonal data
+    wb = Workbook()
+    ws_stores = wb.active
+    ws_stores.title = config.STORE_SHEET
 
+    # Basic columns
+    basic_cols = [
+        config.COL_STORE_ID, config.COL_USE_YN, config.COL_ENG_NAME, config.COL_MN_NAME,
+        config.COL_ADDR, config.COL_DTL_ADDR, "Location opening date", "Location closing date",
+        config.COL_LAT, config.COL_LON, config.COL_OPEN, config.COL_CLOSE
+    ]
+
+    # Seasonal columns with multi-level headers
+    seasons = ["Summer Avarage Order", "Autumn Avarage Order", "Winter Avarage Order", "Spring Avarage Order"]
+    metrics = ["CBM (DRY DC)", "Weight (DRY DC)", "CBM (COLD DC)", "Weight (COLD DC)"]
+
+    # Write multi-level headers
+    col = 1
+    for basic_col in basic_cols:
+        ws_stores.cell(row=1, column=col, value=basic_col)
+        ws_stores.cell(row=2, column=col, value="")
+        col += 1
+
+    for season in seasons:
+        for metric in metrics:
+            ws_stores.cell(row=1, column=col, value=season)
+            ws_stores.cell(row=2, column=col, value=metric)
+            col += 1
+
+    # Style headers
+    for row in [1, 2]:
+        for c in range(1, col):
+            cell = ws_stores.cell(row=row, column=c)
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center")
+
+    # Write store data
+    for row_idx, s in enumerate(stores, start=3):
+        col = 1
+        # Basic columns
+        ws_stores.cell(row=row_idx, column=col, value=s["store_id"]); col += 1
+        ws_stores.cell(row=row_idx, column=col, value="open"); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=s.get("eng_name", "")); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=s.get("mn_name", "")); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=s.get("address", "")); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=s.get("detail_addr", "")); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=""); col += 1  # Location opening date
+        ws_stores.cell(row=row_idx, column=col, value=""); col += 1  # Location closing date
+        ws_stores.cell(row=row_idx, column=col, value=s["lat"]); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=s["lon"]); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=fmt_time(s["open_s"])); col += 1
+        ws_stores.cell(row=row_idx, column=col, value=fmt_time(s["close_s"])); col += 1
+
+        # Seasonal data
+        seasonal = s.get("seasonal_data", {})
+        season_keys = ["summer", "autumn", "winter", "spring"]
+        for s_key in season_keys:
+            data = seasonal.get(s_key, {})
+            ws_stores.cell(row=row_idx, column=col, value=data.get("dry_cbm", 0)); col += 1
+            ws_stores.cell(row=row_idx, column=col, value=data.get("dry_kg", 0)); col += 1
+            ws_stores.cell(row=row_idx, column=col, value=data.get("cold_cbm", 0)); col += 1
+            ws_stores.cell(row=row_idx, column=col, value=data.get("cold_kg", 0)); col += 1
+
+    # Create vehicles sheet
+    ws_vehicles = wb.create_sheet(title=config.VEHICLE_SHEET)
     vehicles_data = [{
         config.COL_DEPOT       : v["depot"],
         config.COL_TRUCK_ID    : v["truck_id"],
@@ -341,19 +392,32 @@ async def export_dataset(dataset_id: str,
         config.COL_LABOR_COST  : v["labor_cost"],
     } for v in vehicles]
 
-    buf = _io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        pd.DataFrame(stores_data).to_excel(writer, sheet_name=config.STORE_SHEET, index=False)
-        pd.DataFrame(vehicles_data).to_excel(writer, sheet_name=config.VEHICLE_SHEET, index=False)
-        matrix_bytes = await load_matrix_bytes(dataset_id)
-        if matrix_bytes:
-            try:
-                dist_df, dur_df = data_loader.load_matrix(matrix_bytes)
-                dur_df.to_excel(writer,  sheet_name=config.DURATION_SHEET)
-                dist_df.to_excel(writer, sheet_name=config.DISTANCE_SHEET)
-            except Exception as me:
-                log.warning(f"Could not include matrix in export: {me}")
+    for r_idx, row_data in enumerate(vehicles_data, start=1):
+        for c_idx, (key, value) in enumerate(row_data.items(), start=1):
+            ws_vehicles.cell(row=r_idx, column=c_idx, value=key if r_idx == 1 else value)
+            if r_idx == 1:
+                ws_vehicles.cell(row=r_idx, column=c_idx).font = Font(bold=True)
 
+    # Add matrix sheets if available
+    matrix_bytes = await load_matrix_bytes(dataset_id)
+    if matrix_bytes:
+        try:
+            dist_df, dur_df = data_loader.load_matrix(matrix_bytes)
+            # Duration sheet
+            ws_duration = wb.create_sheet(title=config.DURATION_SHEET)
+            for r_idx, (idx, row) in enumerate(dur_df.iterrows(), start=1):
+                for c_idx, val in enumerate([idx] + row.tolist(), start=1):
+                    ws_duration.cell(row=r_idx, column=c_idx, value=val)
+            # Distance sheet
+            ws_distance = wb.create_sheet(title=config.DISTANCE_SHEET)
+            for r_idx, (idx, row) in enumerate(dist_df.iterrows(), start=1):
+                for c_idx, val in enumerate([idx] + row.tolist(), start=1):
+                    ws_distance.cell(row=r_idx, column=c_idx, value=val)
+        except Exception as me:
+            log.warning(f"Could not include matrix in export: {me}")
+
+    buf = _io.BytesIO()
+    wb.save(buf)
     buf.seek(0)
     safe_name = ds["name"].replace(" ", "_").replace("/", "-")
     return Response(
@@ -395,8 +459,8 @@ async def add_store(dataset_id: str, body: StoreCreate,
     doc = {
         "_id"        : str(uuid.uuid4()),
         "dataset_id" : dataset_id,
-        "store_id"   : body.store_id,
-        "node_id"    : norm(body.store_id),
+        "store_id"   : body.store_id,  # Preserve original format
+        "node_id"    : norm(body.store_id),  # Normalized for matrix lookups
         "eng_name"   : body.eng_name,
         "mn_name"    : body.mn_name,
         "address"    : body.address,
@@ -411,6 +475,7 @@ async def add_store(dataset_id: str, body: StoreCreate,
         "cold_kg"    : body.cold_kg,
         "has_dry"    : body.dry_kg > 0 or body.dry_cbm > 0,
         "has_cold"   : body.cold_kg > 0 or body.cold_cbm > 0,
+        "seasonal_data": {},  # Empty for manually added stores
     }
     await db[StoreDoc.COLLECTION].insert_one(doc)
     # Convert MongoDB document to JSON-serializable format
@@ -561,8 +626,10 @@ async def optimize(
     rural_solver_time : Optional[int]          = Form(None),
     group_id          : Optional[str]          = Form(None),
     version_name      : Optional[str]          = Form(None),
+    season            : str                    = Form("summer"),
     max_weight_fill   : float                  = Form(1.0),
     max_volume_fill   : float                  = Form(1.0),
+    custom_config     : Optional[str]          = Form(None),
     db                : AsyncIOMotorDatabase   = Depends(get_db),
 ):
     """
@@ -576,9 +643,9 @@ async def optimize(
     if mode not in ("fastest", "shortest", "cheapest", "balanced", "geographic"):
         raise HTTPException(400, f"Invalid mode '{mode}'")
     if not (0.0 <= max_weight_fill <= 1.5):
-        raise HTTPException(400, "max_weight_fill must be between 0.0 and 1.0")
+        raise HTTPException(400, "max_weight_fill must be between 0.0 and 1.5")
     if not (0.0 <= max_volume_fill <= 1.5):
-        raise HTTPException(400, "max_volume_fill must be between 0.0 and 1.0")
+        raise HTTPException(400, "max_volume_fill must be between 0.0 and 1.5")
 
     # ── Resolve data (fast — only I/O) ──────────────────────
     if dataset_id:
@@ -595,7 +662,7 @@ async def optimize(
     elif store_file and matrix_file:
         sb            = await store_file.read()
         matrix_bytes  = await matrix_file.read()
-        stores_list   = data_loader.load_stores(sb)
+        stores_list, _ = data_loader.load_stores(sb, season)  # Ignore warnings for optimization
         vehicles_list = data_loader.load_vehicles(sb)
         dataset_id    = None
     else:
@@ -614,15 +681,25 @@ async def optimize(
         version_name=version_name, mode=mode,
         max_trips=max_trips, solver_time=solver_time,
         rural_solver_time=rural_solver_time,
+        season=season,
     )
     job_doc["status"] = "running"
     await db[JobDoc.COLLECTION].insert_one(job_doc)
+
+    # ── Parse custom config if provided ─────────────────────
+    custom_config_dict = None
+    if custom_config:
+        try:
+            custom_config_dict = json.loads(custom_config)
+            log.info(f"Job {job_id[:8]}: Using custom config overrides: {list(custom_config_dict.keys())}")
+        except json.JSONDecodeError:
+            log.warning(f"Job {job_id[:8]}: Invalid custom_config JSON, ignoring")
 
     # ── Fire-and-forget background task ─────────────────────
     asyncio.create_task(_solve_background(
         job_id, stores_list, vehicles_list, matrix_bytes,
         mode, max_trips, solver_time, max_weight_fill, max_volume_fill,
-        rural_solver_time, db,
+        rural_solver_time, season, db, custom_config_dict,
     ))
 
     log.info(f"Job {job_id[:8]} queued — mode={mode}, stores={len(stores_list)}, solver={solver_time}s")
@@ -709,6 +786,8 @@ async def create_manual_job(body: ManualJobCreate,
         vehicle_id = route["vehicle_id"]
         stop_ids   = [s.strip() for s in route.get("stops", []) if str(s).strip()]
         route_name = route.get("route_name", f"Route {route_idx + 1}")
+        truck_number = route.get("truck_number")
+        contractor = route.get("contractor")
 
         vehicle = vehicles_dict.get(vehicle_id)
         if not vehicle:
@@ -770,6 +849,8 @@ async def create_manual_job(body: ManualJobCreate,
                 "is_rural"    : False,
                 "demand_kg"   : round(demand_kg, 2),
                 "demand_m3"   : round(demand_m3, 3),
+                "truck_num"   : truck_number,
+                "contractor"  : contractor or vehicle.get("contractor"),
             })
 
             if fleet == "DRY": served_dry.add(sid)
@@ -805,6 +886,8 @@ async def create_manual_job(body: ManualJobCreate,
             "cost_labor"  : float(vehicle["labor_cost"]),
             "cost_total"  : round(route_cost, 0),
             "departs_at"  : fmt_wall(start_wall),
+            "truck_num"   : truck_number,
+            "contractor"  : contractor or vehicle.get("contractor"),
             "returns_at"  : fmt_wall(return_wall),
             "is_overnight": return_wall >= 86400,
             "man_hours"   : round((return_wall - start_wall) / 3600.0, 2),
@@ -961,30 +1044,33 @@ async def _solve_background(
     solver_time     : int,
     max_weight_fill : float,
     max_volume_fill : float,
-    rural_solver_time,        # kept in signature for API compat, ignored
+    rural_solver_time: Optional[int],
+    season          : str,
     db,
+    custom_config   : Optional[dict] = None,
 ):
     from solver import SolverConfig   # local import keeps top-level clean
- 
+
     loop = asyncio.get_event_loop()
     q    = asyncio.Queue()
     _job_log_queues[job_id] = q
- 
+
     handler  = _JobLogHandler(job_id, loop)
     root_log = logging.getLogger()
     root_log.addHandler(handler)
- 
+
     async def _emit(msg: str):
         await q.put(msg)
- 
+
     try:
         await _emit(f"INFO     main — ⚡ Job {job_id[:8]} starting …")
- 
+
         # ── Build SolverConfig (no global mutation) ──────────────
         cfg = SolverConfig(
             mode                  = mode,
             max_trips             = max_trips,
             solver_time_s         = solver_time,
+            rural_solver_time     = rural_solver_time,
             max_weight_fill       = max_weight_fill,
             max_volume_fill       = max_volume_fill,
             reload_time_s         = config.RELOAD_TIME_SECONDS,
@@ -995,6 +1081,41 @@ async def _solve_background(
             m3_scale              = config.M3_SCALE,
             far_threshold_km      = config.FAR_THRESHOLD_KM,
         )
+
+        # ── Apply custom config overrides if provided ───────────
+        if custom_config:
+            # Handle FLEET_SCHEDULE overrides
+            fleet_schedule_overrides = {}
+            for key in ["DRY_START_HOUR", "DRY_MAX_HORIZON_HOUR", "COLD_START_HOUR", "COLD_MAX_HORIZON_HOUR"]:
+                if key in custom_config:
+                    fleet_schedule_overrides[key] = custom_config[key]
+
+            if fleet_schedule_overrides:
+                # Reconstruct FLEET_SCHEDULE with overrides
+                original_schedule = copy.deepcopy(config.FLEET_SCHEDULE)
+                if "DRY_START_HOUR" in fleet_schedule_overrides:
+                    original_schedule["DRY"]["start_hour"] = fleet_schedule_overrides["DRY_START_HOUR"]
+                if "DRY_MAX_HORIZON_HOUR" in fleet_schedule_overrides:
+                    original_schedule["DRY"]["max_horizon_hour"] = fleet_schedule_overrides["DRY_MAX_HORIZON_HOUR"]
+                if "COLD_START_HOUR" in fleet_schedule_overrides:
+                    original_schedule["COLD"]["start_hour"] = fleet_schedule_overrides["COLD_START_HOUR"]
+                if "COLD_MAX_HORIZON_HOUR" in fleet_schedule_overrides:
+                    original_schedule["COLD"]["max_horizon_hour"] = fleet_schedule_overrides["COLD_MAX_HORIZON_HOUR"]
+                config.FLEET_SCHEDULE = original_schedule
+                await _emit(f"INFO     main — Custom FLEET_SCHEDULE applied")
+
+            # Handle other config overrides
+            for key, value in custom_config.items():
+                if key in fleet_schedule_overrides:
+                    continue  # Already handled above
+                if hasattr(cfg, key):
+                    setattr(cfg, key, value)
+                    await _emit(f"INFO     main — Custom config: {key} = {value}")
+                elif hasattr(config, key):
+                    setattr(config, key, value)
+                    await _emit(f"INFO     main — Custom config (global): {key} = {value}")
+                else:
+                    await _emit(f"WARNING  main — Unknown config key: {key}")
  
         await _emit(f"INFO     main — mode={cfg.mode}, trips={cfg.max_trips}, "
                     f"budget={cfg.solver_time_s}s")
@@ -1024,7 +1145,7 @@ async def _solve_background(
         result = await loop.run_in_executor(
             _solve_executor,
             lambda: vrp_solver.solve(
-                stores_list, vehicles_list, dist_df, dur_df, cfg=cfg
+                stores_list, vehicles_list, dist_df, dur_df, cfg=cfg, season=season
             ),
         )
  
@@ -1209,7 +1330,7 @@ async def build_matrix_endpoint(
         store_docs  = await db[StoreDoc.COLLECTION].find({"dataset_id": dataset_id}).to_list(None)
         stores_list = [StoreDoc.to_solver_dict(s) for s in store_docs]
     elif store_file:
-        stores_list = data_loader.load_stores(await store_file.read())
+        stores_list, _ = data_loader.load_stores(await store_file.read(), "summer")  # Ignore warnings for optimization
         dataset_id  = None
     else:
         raise HTTPException(422, "Provide dataset_id or store_file")
@@ -1387,6 +1508,7 @@ async def fork_job(job_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
         mode         = src.get("mode"),
         max_trips    = src.get("max_trips"),
         solver_time  = src.get("solver_time"),
+        season       = src.get("season"),
     )
     new_doc["status"]       = "done"
     new_doc["completed_at"] = datetime.datetime.utcnow()

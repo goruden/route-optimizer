@@ -203,6 +203,9 @@ class StoreDoc:
             "cold_kg"     : row.get("cold_kg", 0.0),
             "has_dry"     : row.get("has_dry", False),
             "has_cold"    : row.get("has_cold", False),
+            "seasonal_data": row.get("seasonal_data", {}),
+            "city"        : row.get("city", "Rural"),
+            "is_urban"    : row.get("is_urban", False),
         }
 
     @staticmethod
@@ -224,6 +227,9 @@ class StoreDoc:
             "cold_kg"     : doc["cold_kg"],
             "has_dry"     : doc["has_dry"],
             "has_cold"    : doc["has_cold"],
+            "seasonal_data": doc.get("seasonal_data", {}),
+            "city"        : doc.get("city", "Rural"),
+            "is_urban"    : doc.get("is_urban", False),
         }
 
 
@@ -240,7 +246,10 @@ class VehicleDoc:
         return {
             "dataset_id"   : dataset_id,
             "truck_id"     : row["truck_id"],
+            "truck_num"    : row.get("truck_num", ""),
             "description"  : row.get("description", ""),
+            "contractor"   : row.get("contractor", ""),
+            "is_fleet"    : row.get("is_fleet", False),
             "depot"        : row["depot"],
             "fleet"        : row.get("fleet", "DRY"),
             "cap_kg"       : row["cap_kg"],
@@ -254,7 +263,10 @@ class VehicleDoc:
     def to_solver_dict(doc: dict) -> dict:
         return {
             "truck_id"     : doc["truck_id"],
+            "truck_num"    : doc.get("truck_num", ""),
             "description"  : doc.get("description", ""),
+            "contractor"   : doc.get("contractor", ""),
+            "is_fleet"    : doc.get("is_fleet", False),
             "depot"        : doc["depot"],
             "fleet"        : doc["fleet"],
             "cap_kg"       : doc["cap_kg"],
@@ -276,7 +288,8 @@ class JobDoc:
     def make(job_id: str, dataset_id=None, group_id: str = None,
              version_name: str = None, is_manual: bool = False,
              mode: str = None, max_trips: int = None,
-             solver_time: int = None, rural_solver_time: int = None) -> dict:
+             solver_time: int = None, rural_solver_time: int = None,
+             season: str = None) -> dict:
         return {
             "_id"              : job_id,
             "dataset_id"       : dataset_id,
@@ -287,6 +300,7 @@ class JobDoc:
             "max_trips"        : max_trips,
             "solver_time"      : solver_time,
             "rural_solver_time": rural_solver_time,
+            "season"           : season,
             "status"           : "pending",
             "error_msg"        : None,
             "created_at"       : datetime.datetime.utcnow(),
@@ -305,6 +319,7 @@ class JobDoc:
             "max_trips"        : doc.get("max_trips"),
             "solver_time"      : doc.get("solver_time"),
             "rural_solver_time": doc.get("rural_solver_time"),
+            "season"           : doc.get("season"),
             "status"           : doc.get("status"),
             "error_msg"        : doc.get("error_msg"),
             "created_at"       : doc["created_at"].isoformat() if doc.get("created_at") else None,

@@ -23,10 +23,14 @@ export function UnservedPanel() {
   const { unserved } = s;
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return unserved.filter(u =>
-      (fleetF === "ALL" || u.fleet === fleetF) &&
-      (!q || u.store_id.toLowerCase().includes(q) || u.eng_name?.toLowerCase().includes(q) || u.reason?.toLowerCase().includes(q))
-    );
+    return unserved
+      .filter(u =>
+        (fleetF === "ALL" || u.fleet === fleetF) &&
+        (!q || u.store_id.toLowerCase().includes(q) || u.eng_name?.toLowerCase().includes(q) || u.reason?.toLowerCase().includes(q))
+      )
+      .sort((a, b) => {
+        return a.fleet === b.fleet ? 0 : a.fleet === "DRY" ? -1 : 1;
+      });
   }, [unserved, search, fleetF]);
 
   if (!unserved.length && s.summary) return (

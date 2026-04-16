@@ -5,32 +5,38 @@ import * as api from "@/lib/api";
 import { Btn, SectionLabel, showToast, ProgressBar, SolverTerminal } from "./ui";
 import { StoreIcon, VehicleIcon, CheckIcon, WarningIcon, LightningIcon, RulerIcon, BalanceIcon, MapIcon, MoneyIcon, FolderIcon, TargetIcon, SettingsIcon, TagIcon } from "./icons";
 import type { Dataset } from "@/types/vrp";
+import { Tooltip } from "./Tooltip";
 
 const MODE_INFO=[
   { v:"cheapest",  
     e:<MoneyIcon size="size-6" />,
     l:"Хямд",  
-    desc:"Min fuel ₮/km"
+    desc:"Min fuel ₮/km",
+    tooltip:"Хамгийн бага зардал"
   },
   {v:"fastest",   
     e:<LightningIcon size="size-6" />,
     l:"Хурдан",   
-    desc:"Min travel time"
+    desc:"Min travel time",
+    tooltip:"Хамгийн бага хугацаа"
   },
   {v:"shortest",  
     e:<RulerIcon size="size-6" />,
     l:"Дөт зам",  
-    desc:"Min km driven"
+    desc:"Min km driven",
+    tooltip:"Хамгийн бага зам"
   },
   {v:"balanced",  
     e:<BalanceIcon size="size-6" />,
     l:"Тэнцвэртэй",  
-    desc:"Even truck loads"
+    desc:"Even truck loads",
+    tooltip:"Тээврийн хэрэгсэл тэнцвэртэй хувиарлалт"
   },
   {v:"geographic",  
     e:<MapIcon size="size-6" />,
     l:"Газар зүйн",  
-    desc:"Tight zone clusters"
+    desc:"Tight zone clusters",
+    tooltip:"Бүс нутгаар хувиарлалт"
   },
 ];
 
@@ -87,6 +93,8 @@ export function RunPanel(){
   const[targetGroup,setTargetGroup]=useState<string>("none");
   const[versionName,setVersionName]=useState("");
   const[solverStartedAt,setSolverStartedAt]=useState<number|null>(null);
+  const[showConfigModal,setShowConfigModal]=useState(false);
+  const[customConfig,setCustomConfig]=useState<Record<string,any>>({});
   const canRun = s.activeDatasetId != null && !s.running;
 
   // Clear timing when not running
@@ -116,6 +124,8 @@ export function RunPanel(){
         dataset_id:s.activeDatasetId,
         group_id:gid,
         version_name:versionName.trim()||undefined,
+        season:s.season,
+        custom_config: Object.keys(customConfig).length > 0 ? customConfig : undefined,
       });
 
       // ── Step 2: Store job_id so SolverTerminal opens WebSocket ──
@@ -195,25 +205,33 @@ export function RunPanel(){
             <div className="grid grid-cols-3 gap-1.5 mb-1.5">
               {MODE_INFO.slice(0,3).map(m=>{
                 const act=mode===m.v; const c=MODE_COLOR[m.v];
-                return(<button key={m.v} onClick={()=>setMode(m.v)}
-                  className="py-2 rounded-xl border-[1.5px] text-[11px] font-semibold justify-center items-center text-center transition-all flex flex-col"
-                  style={{borderColor:act?c:"rgb(226 232 240)",background:act?c+"14":"#fff",color:act?c:"rgb(100 116 139)",boxShadow:act?`0 2px 8px ${c}30`:"none"}}>
-                  <div className="text-[15px] flex items-center justify-center">{m.e}</div>
-                  <div className="font-bold text-[10px]">{m.l}</div>
-                  <div className="text-[9px] opacity-60">{m.desc}</div>
-                </button>);
+                return(
+                <Tooltip content={m.tooltip} key={m.v}>
+                  <button key={m.v} onClick={()=>setMode(m.v)}
+                    className="w-full py-2 rounded-xl border-[1.5px] text-[11px] font-semibold justify-center items-center text-center transition-all flex flex-col"
+                    style={{borderColor:act?c:"rgb(226 232 240)",background:act?c+"14":"#fff",color:act?c:"rgb(100 116 139)",boxShadow:act?`0 2px 8px ${c}30`:"none"}}>
+                    <div className="text-[15px] flex items-center justify-center">{m.e}</div>
+                    <div className="font-bold text-[10px]">{m.l}</div>
+                    <div className="text-[9px] opacity-60">{m.desc}</div>
+                  </button>
+                </Tooltip>
+                );
               })}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {MODE_INFO.slice(3).map(m=>{
                 const act=mode===m.v; const c=MODE_COLOR[m.v];
-                return(<button key={m.v} onClick={()=>setMode(m.v)}
-                  className="py-2 rounded-xl border-[1.5px] text-[11px] font-semibold justify-center items-center text-center transition-all flex flex-col"
-                  style={{borderColor:act?c:"rgb(226 232 240)",background:act?c+"14":"#fff",color:act?c:"rgb(100 116 139)",boxShadow:act?`0 2px 8px ${c}30`:"none"}}>
-                  <div className="text-[15px] flex items-center justify-center">{m.e}</div>
-                  <div className="font-bold text-[10px]">{m.l}</div>
-                  <div className="text-[9px] opacity-60">{m.desc}</div>
-                </button>);
+                return(
+                <Tooltip content={m.tooltip} key={m.v}>
+                  <button key={m.v} onClick={()=>setMode(m.v)}
+                    className="w-full py-2 rounded-xl border-[1.5px] text-[11px] font-semibold justify-center items-center text-center transition-all flex flex-col"
+                    style={{borderColor:act?c:"rgb(226 232 240)",background:act?c+"14":"#fff",color:act?c:"rgb(100 116 139)",boxShadow:act?`0 2px 8px ${c}30`:"none"}}>
+                    <div className="text-[15px] flex items-center justify-center">{m.e}</div>
+                    <div className="font-bold text-[10px]">{m.l}</div>
+                    <div className="text-[9px] opacity-60">{m.desc}</div>
+                  </button>
+                </Tooltip>
+                );
               })}
             </div>
           </div>
@@ -222,7 +240,12 @@ export function RunPanel(){
           <div>
             <SectionLabel action={
               <SettingsIcon />
-            } label="Тохиргоо" />
+            } label="Тохиргоо" extra={
+              <span 
+                className="text-[10px] text-slate-500 cursor-pointer hover:text-red-500 hover:underline ml-auto mr-3"
+                onClick={() => setShowConfigModal(true)}
+              >Config</span>
+            } />
 
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
 
@@ -305,6 +328,23 @@ export function RunPanel(){
                 </div>
               </div>
 
+              {/* SEASON */}
+              <div className="px-3 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-semibold text-slate-700">Улирал</div>
+                    <div className="text-[9px] text-slate-400">Эрэлт хангах улирал</div>
+                  </div>
+                  <select value={s.season} onChange={e => d({t:"SET_SEASON", v:e.target.value as any})}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold outline-none focus:ring-2 focus:ring-red-400">
+                    <option value="summer">Зун (Summer)</option>
+                    <option value="autumn">Намар (Autumn)</option>
+                    <option value="winter">Өвөл (Winter)</option>
+                    <option value="spring">Хавар (Spring)</option>
+                  </select>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -341,8 +381,8 @@ export function RunPanel(){
         {s.running ? (
           <div className="w-full flex flex-col items-center gap-2 py-2">
             <div className="flex items-center gap-2">
-              <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>
-              <span className="text-[13px] font-bold text-blue-500">Замыг тооцоолж байна...</span>
+              <span className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"/>
+              <span className="text-[13px] font-bold text-red-500">Замыг тооцоолж байна...</span>
             </div>
             <p className="text-[10px] text-slate-400 text-center">
               OR-Tools ашиглан замыг тооцоолж байна...
@@ -357,6 +397,70 @@ export function RunPanel(){
           <p className="text-center text-[10px] text-slate-400 mt-2">Дата өгөгдлөөс сонгож тооцоолно уу</p>
         )}
       </div>
+
+      {/* Config Modal */}
+      {showConfigModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-9999 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <h2 className="text-[14px] font-bold text-slate-900">Config Settings (Temporary)</h2>
+              <button 
+                onClick={() => setShowConfigModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-[20px] font-bold"
+              >×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <p className="text-[11px] text-slate-500 mb-2">Changes apply to current run only (reset after reload)</p>
+              
+              {[
+                { key: "SERVICE_TIME_SECONDS", label: "Service Time (seconds)", type: "number", default: 600 },
+                { key: "RELOAD_TIME_SECONDS", label: "Reload Time (seconds)", type: "number", default: 1800 },
+                { key: "PENALTY_UNSERVED", label: "Penalty Unserved", type: "number", default: 10000000000 },
+                { key: "VEHICLE_FIXED_COST", label: "Vehicle Fixed Cost", type: "number", default: 5000 },
+                { key: "M3_SCALE", label: "M3 Scale", type: "number", default: 1000 },
+                { key: "BALANCED_SPAN_COEFF", label: "Balanced Span Coeff", type: "number", default: 300 },
+                { key: "DRY_START_HOUR", label: "DRY Start Hour", type: "number", default: 13 },
+                { key: "DRY_MAX_HORIZON_HOUR", label: "DRY Max Horizon Hour", type: "number", default: 24 },
+                { key: "COLD_START_HOUR", label: "COLD Start Hour", type: "number", default: 3 },
+                { key: "COLD_MAX_HORIZON_HOUR", label: "COLD Max Horizon Hour", type: "number", default: 14 },
+              ].map((cfg) => (
+                <div key={cfg.key} className="flex items-center justify-between py-2 border-b border-slate-100">
+                  <div className="flex-1">
+                    <div className="text-[12px] font-semibold text-slate-700">{cfg.label}</div>
+                    <div className="text-[10px] text-slate-400">{cfg.key}</div>
+                  </div>
+                  <input
+                    type={cfg.type}
+                    value={customConfig[cfg.key] ?? cfg.default}
+                    onChange={(e) => setCustomConfig(prev => ({
+                      ...prev,
+                      [cfg.key]: cfg.type === "number" ? Number(e.target.value) : e.target.value
+                    }))}
+                    className="w-24 text-right text-[12px] font-mono border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 p-4 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  setCustomConfig({});
+                  setShowConfigModal(false);
+                }}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-[12px] font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => setShowConfigModal(false)}
+                className="flex-1 py-2 rounded-xl bg-red-500 text-white text-[12px] font-semibold hover:bg-red-600"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

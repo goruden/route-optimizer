@@ -1,10 +1,7 @@
 "use client";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "@/lib/state";
-import { RouteBuilderModal, routesFromSolverData } from "./AddPanel";
-import { showToast } from "./ui";
-import type { RouteSummary } from "@/types/vrp";
-import { EditIcon, VehicleIcon } from "./icons";
+import { VehicleIcon } from "./icons";
 
 function utilColor(p: number) {
   return p >= 90 ? "rgb(239 68 68)" : p >= 65 ? "rgb(245 158 11)" : "rgb(16 185 129)";
@@ -24,35 +21,26 @@ function Bar({ pct, color }: { pct: number; color: string }) {
 export function RoutesPanel() {
   const { s } = useApp();
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<string>("truck_id");
-  const [sortAsc, setSortAsc] = useState(true);
   const [fleetF, setFleetF] = useState("ALL");
-  const [showEditModal, setShowEditModal] = useState(false);
 
   const rows = s.routeSummary;
-
-  // Build initial routes for edit modal from existing stop data
-  const editInitialRoutes = useMemo(() => {
-    if (!s.routeSummary.length || !s.stopDetails.length) return [];
-    return routesFromSolverData(s.routeSummary, s.stopDetails);
-  }, [s.routeSummary, s.stopDetails]);
-
-  // Dataset id from active job
-  const activeJob = s.jobs.find(j => j.id === s.activeJobId);
-  const editDatasetId = activeJob?.dataset_id ?? s.activeDatasetId ?? undefined;
-  const editGroupId = activeJob?.group_id ?? undefined;
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows
-      .filter(r => (fleetF === "ALL" || r.fleet === fleetF) &&
-        (!q || r.truck_id.toLowerCase().includes(q) || r.fleet.toLowerCase().includes(q)))
-      .sort((a: any, b: any) => {
-        const av = a[sortKey], bv = b[sortKey];
-        if (typeof av === "string") return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
-        return sortAsc ? av - bv : bv - av;
+      .filter(r =>
+        (fleetF === "ALL" || r.fleet === fleetF) &&
+        (!q || r.truck_id.toLowerCase().includes(q) || 
+         (r.truck_num && r.truck_num.toLowerCase().includes(q)) ||
+         (r.contractor && r.contractor.toLowerCase().includes(q)))
+      )
+      .sort((a, b) => {
+        const fleetOrder = a.fleet === b.fleet ? 0 : a.fleet === "DRY" ? -1 : 1;
+        if (fleetOrder !== 0) return fleetOrder;
+        const naturalSort = (str: string) => str.replace(/(\d+)/g, (match) => match.padStart(10, '0'));
+        return naturalSort(a.truck_id).localeCompare(naturalSort(b.truck_id));
       });
-  }, [rows, search, fleetF, sortKey, sortAsc]);
+  }, [rows, search, fleetF]);
 
   if (!rows.length) return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
@@ -62,113 +50,33 @@ export function RoutesPanel() {
     </div>
   );
 
-  const totalFuel     = rows.reduce((a, r) => a + r.cost_fuel,  0);
-  const totalFixed    = rows.reduce((a, r) => a + r.cost_fixed, 0);
-  const totalLabor    = rows.reduce((a, r) => a + r.cost_labor, 0);
-  const totalCost     = rows.reduce((a, r) => a + r.cost_total, 0);
-  const totalManHours = rows.reduce((a, r) => a + (r.man_hours ?? 0), 0);
-  const avgUtil       = rows.reduce((a, r) => a + r.util_kg_pct, 0) / rows.length;
-
-  function Th({ label, k }: { label: string; k: string }) {
-    const active = sortKey === k;
-    return (
-      <th
-        className="px-3 py-2.5 text-left whitespace-nowrap cursor-pointer select-none hover:bg-blue-50"
-        onClick={() => { if (active) setSortAsc(a => !a); else { setSortKey(k); setSortAsc(true); } }}
-      >
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-          {label}{active && <span className="text-blue-500">{sortAsc ? "↑" : "↓"}</span>}
-        </span>
-      </th>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* KPI bar */}
-      <div className="shrink-0 flex gap-3 px-4 pt-3 pb-1 overflow-x-auto">
-        {[
-          { l: "Дундаж",   v: `${avgUtil.toFixed(1)}%`,                                                                           c: utilColor(avgUtil) },
-          { l: "Хүн цаг",  v: `${totalManHours.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})}h`,     c: "rgb(139 92 246)" },
-          { l: "Түлш",       v: `₮${Math.round(totalFuel).toLocaleString()}`,                                                       c: "rgb(245 158 11)" },
-          { l: "Тогтмол",      v: `₮${Math.round(totalFixed).toLocaleString()}`,                                                      c: "rgb(123 130 160)" },
-          { l: "Ажлын зардал",      v: `₮${Math.round(totalLabor).toLocaleString()}`,                                                      c: "rgb(123 130 160)" },
-          { l: "Нийт зардал", v: `₮${Math.round(totalCost).toLocaleString()}`,                                                       c: "rgb(245 158 11)" },
-        ].map(k => (
-          <div key={k.l} className="shrink-0 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
-            <div className="text-[10px] text-slate-500 mb-0.5">{k.l}</div>
-            <div className="font-mono font-bold text-[13px]" style={{ color: k.c }}>{k.v}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className="shrink-0 flex items-center gap-2.5 px-4 py-2.5">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search routes…"
-          className="flex-1 max-w-52 text-[12px] border border-slate-200 rounded-xl px-3 py-1.5 bg-white outline-none focus:border-blue-500"
-        />
+      <div className="shrink-0 flex items-center gap-2.5 px-4 py-2.5 bg-white border-b border-slate-200">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search routes…"
+          className="flex-1 max-w-65 text-[12px] border border-slate-200 rounded-xl px-3 py-1.5 bg-white outline-none focus:border-red-500" />
         <div className="flex gap-1.5">
           {["ALL","DRY","COLD"].map(f => (
-            <button
-              key={f}
-              onClick={() => setFleetF(f)}
+            <button key={f} onClick={() => setFleetF(f)}
               className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border-[1.5px] transition-all ${fleetF === f ? "bg-red-50 border-red-600 text-red-600" : "border-slate-200 bg-white text-slate-600"}`}
-              // style={{
-              //   borderColor: fleetF===f ? "rgb(91 124 250)" : "rgb(226 232 240)",
-              //   background: fleetF===f ? "rgba(91,124,250,0.08)" : "#fff",
-              //   color: fleetF===f ? "rgb(91 124 250)" : "rgb(123 130 160)",
-              // }}
-            >
+              >
               {f}
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-slate-500 font-mono">{filtered.length} зогсоол</span>
-
-        {/* Edit routes button — opens RouteBuilderModal */}
-        <div className="ml-auto">
-          {editDatasetId ? (
-            <button
-              onClick={() => {
-                if (!s.stopDetails.length) {
-                  showToast("Зогсоолын мэдээлэл байхгүй байна", "info");
-                  return;
-                }
-                setShowEditModal(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border-[1.5px] border-violet-300 text-violet-500 bg-violet-500/6 hover:bg-violet-500/12 transition-all"
-            >
-              <EditIcon size="size-4"/> Засах
-            </button>
-          ) : (
-            <span className="text-[10px] text-slate-400 italic">
-              (Засвар оруулахын тулд өгөгдөл байх ёстой)
-            </span>
-          )}
-        </div>
+        <span className="text-[11px] text-slate-500 font-mono ml-auto">{filtered.length} / {rows.length} чиглэл</span>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto px-4 pb-4">
+      <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10 bg-slate-100">
             <tr>
-              <Th label="Fleet"     k="fleet"       />
-              <Th label="Truck"     k="truck_id"    />
-              <Th label="Trip"      k="trip_number" />
-              <Th label="Departs"   k="departs_at"  />
-              <Th label="Returns"   k="returns_at"  />
-              <Th label="Stops"     k="stops"       />
-              <Th label="Dist km"   k="distance_km" />
-              <Th label="Dur min"   k="duration_min"/>
-              <Th label="Load kg"   k="util_kg_pct" />
-              <Th label="Load m³"   k="util_m3_pct" />
-              <Th label="Fuel ₮"    k="cost_fuel"   />
-              <Th label="Man-hrs"   k="man_hours"   />
-              <Th label="Total ₮"   k="cost_total"  />
+              {["Fleet","Truck ID","Truck #","Contractor","Trip","Departs","Returns","Stops","Dist km","Dur min","Load kg","Load m³","Fuel ₮","Man-hrs","Total ₮"].map(h => (
+                <th key={h} className="px-3 py-2.5 text-left whitespace-nowrap">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{h}</span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -181,6 +89,14 @@ export function RoutesPanel() {
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${r.fleet==="DRY"?"bg-orange-200 text-orange-600":"bg-sky-100 text-sky-600"}`}>{r.fleet}</span>
                 </td>
                 <td className="px-3 py-2 font-mono text-[11px] font-semibold">{r.truck_id}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.truck_num || "—"}</td>
+                <td className="px-3 py-2">
+                  {r.contractor === "Fleet" ? (
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">{r.contractor}</span>
+                  ) : (
+                    <span className="text-[11px] text-slate-600">{r.contractor || "—"}</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">T{r.trip_number}</td>
                 <td className="px-3 py-2 font-mono text-[11px]">{r.departs_at}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-amber-500">{r.returns_at ?? "—"}</td>
@@ -204,16 +120,6 @@ export function RoutesPanel() {
         </table>
       </div>
 
-      {/* Route Builder Modal for editing */}
-      <RouteBuilderModal
-        open={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        mode="edit"
-        initialTitle={`${s.summary?.mode ?? "Edited"} (edited)`}
-        initialRoutes={editInitialRoutes}
-        datasetId={editDatasetId}
-        groupId={editGroupId ?? undefined}
-      />
     </div>
   );
 }

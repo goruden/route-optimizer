@@ -20,6 +20,7 @@ export interface AppState {
   health: "loading" | "ok" | "err"; osrm: "connected" | "unreachable";
   warnings: string[];
   editMode: boolean;
+  season: "summer" | "autumn" | "winter" | "spring";
   auth: {
     isAuthenticated: boolean;
     user: string | null;
@@ -38,6 +39,7 @@ const INIT: AppState = {
   routeVis: {}, fleetFilter: "ALL", running: false,
   health: "loading", osrm: "unreachable", warnings: [],
   editMode: false,
+  season: "summer",
   // Start loading=true so the app waits for token check before showing login
   auth: { isAuthenticated: false, user: null, loading: true, error: null },
 };
@@ -60,6 +62,7 @@ export type Act =
   | { t: "TOGGLE_ROUTE"; v: string }
   | { t: "TOGGLE_ALL"; v: boolean }
   | { t: "SET_EDIT"; v: boolean }
+  | { t: "SET_SEASON"; v: AppState["season"] }
   | { t: "AUTH_LOGIN_START" }
   | { t: "AUTH_LOGIN_SUCCESS"; user: string }
   | { t: "AUTH_LOGIN_FAILURE"; error: string }
@@ -84,6 +87,7 @@ function reduce(s: AppState, a: Act): AppState {
     case "SET_ACTIVE_JOB":   return { ...s, activeJobId: a.v };
     case "SET_ROUTES":       return { ...s, routeSummary: a.v };
     case "SET_EDIT":         return { ...s, editMode: a.v };
+    case "SET_SEASON":       return { ...s, season: a.v };
     case "SET_RUNNING":      return { ...s, running: a.v };
     case "SET_SIDE":         return { ...s, sideTab: a.v };
     case "SET_MAIN":         return { ...s, mainTab: a.v };

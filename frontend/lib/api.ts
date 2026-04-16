@@ -184,6 +184,8 @@ export const optimize = (p: {
   mode: string; max_trips: number; solver_time: number;
   max_weight_fill?: number; max_volume_fill?: number;
   group_id?: string; version_name?: string;
+  season?: string;
+  custom_config?: Record<string, any>;
 }) => {
   const fd = new FormData();
   fd.append("mode", p.mode);
@@ -196,6 +198,8 @@ export const optimize = (p: {
   if (p.matrix_file)  fd.append("matrix_file",  p.matrix_file);
   if (p.group_id)     fd.append("group_id",     p.group_id);
   if (p.version_name) fd.append("version_name", p.version_name);
+  if (p.season)       fd.append("season",       p.season);
+  if (p.custom_config) fd.append("custom_config", JSON.stringify(p.custom_config));
   return req<{ job_id: string; status: string }>("/api/optimize", { method: "POST", body: fd });
 };
 
@@ -270,7 +274,7 @@ export const patchJobResult = (jobId: string, payload: Record<string, unknown>) 
 
 export const createManualJob = (data: {
   title: string;
-  routes: Array<{ vehicle_id: string; vehicle_name: string; stops: string[]; route_name?: string; }>;
+  routes: Array<{ vehicle_id: string; vehicle_name: string; stops: string[]; route_name?: string; truck_number?: string; contractor?: string; }>;
   is_manual: boolean;
   dataset_id?: string;
 }) => req<Job>("/api/jobs/manual", {

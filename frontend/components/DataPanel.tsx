@@ -135,6 +135,22 @@ function StoreCard({ store: st, onEdit, onDelete }: { store: Store; onEdit: () =
           <MR icon={<ClockIcon title="Operating hours" size="size-4" />} v={`${fmtSec(st.open_s)} – ${fmtSec(st.close_s)}`} mono />
           {st.has_dry && <MR icon={<PackageIcon title="Dry capacity" size="size-4" />} v={`DRY: ${st.dry_kg.toFixed(1)}kg / ${st.dry_cbm.toFixed(3)}m³`} />}
           {st.has_cold && <MR icon={<SnowflakeIcon title="Cold capacity" size="size-4" />} v={`COLD: ${st.cold_kg.toFixed(1)}kg / ${st.cold_cbm.toFixed(3)}m³`} />}
+          {st.seasonal_data && (
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <div className="text-[10px] font-bold text-slate-700 mb-1.5">Seasonal Demand</div>
+              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                {Object.entries(st.seasonal_data).map(([season, data]: [string, any]) => (
+                  <div key={season} className="bg-slate-50 rounded-lg p-1.5">
+                    <div className="font-semibold text-slate-700 capitalize mb-1">{season}</div>
+                    <div className="text-slate-500 space-y-0.5">
+                      <div>DRY: {data.dry_kg.toFixed(0)}kg / {data.dry_cbm.toFixed(2)}m³</div>
+                      <div>COLD: {data.cold_kg.toFixed(0)}kg / {data.cold_cbm.toFixed(2)}m³</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -150,6 +166,8 @@ function VehicleCard({ vehicle: v, onEdit, onDelete }: { vehicle: Vehicle; onEdi
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <span className="font-bold text-[13px] text-slate-900">{v.truck_id}</span>
+            <span className="font-bold text-[13px] text-slate-900">{v.truck_num}</span>
+            {v.contractor && <span className="text-[10px] text-slate-600">{v.contractor}</span>}
             <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md" style={{ background: c + "18", color: c }}>{v.fleet}</span>
           </div>
           <div className="flex gap-1.5">

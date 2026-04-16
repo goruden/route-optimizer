@@ -184,8 +184,8 @@ MAX_TRIPS_PER_VEHICLE = 2      # Trips per vehicle per shift
 SERVICE_TIME_SECONDS = 600     # 10 min per stop
 MAX_SOLVER_TIME_SECONDS = 120  # OR-Tools time budget
 
-# Clustering (for large datasets)
-CLUSTERING = False             # Set True for >100 stores
+# Note: Clustering functionality has been removed
+# All stores are now processed together for optimal routing
 ```
 
 ### Environment Variables
@@ -200,8 +200,7 @@ MONGO_URL=mongodb://localhost:27017
 OSRM_URL=http://localhost:5000
 
 # Optimization
-CLUSTERING=false
-MAX_CLUSTERS=1
+# Note: Clustering parameters have been removed
 
 # Capacity Limits
 MAX_WEIGHT_FILL_PERCENTAGE=1.0
@@ -323,8 +322,8 @@ docker-compose restart osrm
 
 3. **Solver Takes Too Long**
 - Increase `MAX_SOLVER_TIME_SECONDS` in config
-- Enable `CLUSTERING=true` for large datasets
 - Reduce number of vehicles/stores
+- Check OSRM server performance
 
 4. **Frontend API Connection**
 - Verify `NEXT_PUBLIC_API_URL` in frontend .env.local
@@ -350,7 +349,6 @@ docker-compose logs osrm
 ### Optimization Parameters
 
 - **Solver Time**: Increase for better solutions (costs more time)
-- **Clustering**: Enable for >100 stores to improve speed
 - **Service Time**: Adjust based on real unloading times
 - **Speed Factors**: Tune for local traffic patterns
 

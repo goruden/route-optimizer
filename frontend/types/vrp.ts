@@ -12,10 +12,16 @@ export interface Store {
   dry_cbm: number; dry_kg: number;
   cold_cbm: number; cold_kg: number;
   has_dry: boolean; has_cold: boolean;
+  seasonal_data?: {
+    summer: { dry_cbm: number; dry_kg: number; cold_cbm: number; cold_kg: number };
+    autumn: { dry_cbm: number; dry_kg: number; cold_cbm: number; cold_kg: number };
+    winter: { dry_cbm: number; dry_kg: number; cold_cbm: number; cold_kg: number };
+    spring: { dry_cbm: number; dry_kg: number; cold_cbm: number; cold_kg: number };
+  };
 }
 export interface Vehicle {
   id: number; dataset_id: string;
-  truck_id: string; description: string;
+  truck_id: string; truck_num: string; contractor: string; description: string;
   depot: string; fleet: string;
   cap_kg: number; cap_m3: number;
   fuel_cost_km: number; vehicle_cost: number; labor_cost: number;
@@ -24,6 +30,7 @@ export interface Job {
   id: string; dataset_id: string | null;
   group_id?: string | null; version_name?: string | null; is_manual?: boolean;
   mode: string; max_trips: number; solver_time: number;
+  season?: string;
   status: "pending"|"running"|"done"|"error";
   error_msg: string | null;
   created_at: string; completed_at: string | null;
@@ -41,7 +48,7 @@ export interface OptSummary {
   total_cost: number; total_man_hours: number; warnings: string[];
 }
 export interface RouteSummary {
-  fleet: string; truck_id: string; trip_number: number;
+  fleet: string; truck_id: string; truck_num: string; contractor: string; description: string; fuel_cost_km: number; trip_number: number;
   route_type: string; stops: number;
   distance_km: number; duration_min: number;
   load_kg: number; cap_kg: number; util_kg_pct: number;
@@ -50,7 +57,7 @@ export interface RouteSummary {
   departs_at: string; returns_at?: string; is_overnight: boolean; man_hours?: number;
 }
 export interface StopDetail {
-  fleet: string; truck_id: string; trip_number: number; stop_order: number;
+  fleet: string; truck_id: string; truck_num: string; contractor: string; trip_number: number; stop_order: number;
   store_id: string; eng_name: string; mn_name: string;
   address: string; detail_addr: string;
   lat: number; lon: number;
@@ -73,7 +80,7 @@ export interface MapStop {
 }
 export interface MapRoute {
   route_id: string; fleet: "DRY"|"COLD";
-  truck_id: string; trip_number: number;
+  truck_id: string; truck_num: string; contractor: string; trip_number: number;
   is_rural: boolean; color: string; line_style: string;
   stops: MapStop[];
   polyline: [number,number][];
