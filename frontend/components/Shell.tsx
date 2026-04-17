@@ -193,7 +193,7 @@ export function Shell() {
                   className="object-cover max-h-8"
                 /> */}
                 <span className="text-xl font-extrabold bg-linear-to-l from-red-400 to-red-600 bg-clip-text text-transparent">
-                  Digital Twin – RPT
+                  Digital Twin – RPS
                 </span>
               </div>
               

@@ -88,7 +88,7 @@ export default function Authentication() {
             alt="Premium Logo"
             className="h-10"
           />
-          <h1 className="text-3xl font-extrabold bg-linear-to-r from-red-400 to-red-600 bg-clip-text text-transparent">Digital Twin – RPT</h1>
+          <h1 className="text-3xl font-extrabold bg-linear-to-r from-red-400 to-red-600 bg-clip-text text-transparent">Digital Twin – RPS</h1>
           {/* <p className="text-[12px] text-slate-500 mt-1">Нэвтрэх</p> */}
         </div>
 
