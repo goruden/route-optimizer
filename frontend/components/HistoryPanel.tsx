@@ -57,6 +57,7 @@ function JobCard({job:j,active,onClickJob,onFork,onRemove}:{job:any;active:boole
         {!!j.total_unserved&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500"><WarningIcon size="size-3" className="inline mr-1" />{j.total_unserved}</span>}
         {j.total_routes!=null&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500"><VehicleIcon size="size-3" className="inline mr-1" />{j.total_routes}</span>}
         {j.total_cost!=null&&<span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500">₮{Math.round(j.total_cost).toLocaleString()}</span>}
+
       </div>}
       <div className="text-[9px] text-slate-400">{dayjs(j.created_at).add(8, 'hour').format("MMM DD HH:mm")}</div>
       {j.status==="done"&&<div className={`text-[9px] font-bold mt-1 ${active?"text-green-500":"text-blue-500"}`}>{active?"✓ Газрын зурагт харуулж байна":"Дарж харах →"}</div>}

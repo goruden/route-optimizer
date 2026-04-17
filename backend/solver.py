@@ -364,6 +364,15 @@ def _make_geo_cb(manager, dist_dm, dist_depot, is_depot_mask,
     return cb
 
 
+def _make_raw_dist_cb(manager, dist_dm):
+    """True shortest path: pure raw distance, no penalties."""
+    def cb(fi, ti):
+        ni = manager.IndexToNode(fi)
+        nj = manager.IndexToNode(ti)
+        return int(dist_dm[ni][nj])
+    return cb
+
+
 def _make_fuel_cb(
     manager,
     dist_dm,
@@ -670,17 +679,18 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
     # ════════════════════════════════════════════════════════
     # MODE: shortest
     #   Objective: minimise total distance driven.
-    #   Anti-backtrack arc cost prevents zigzag routes.
-    #   Fixed costs charged once per day (no multipliers).
+    #   Pure raw distance callback (no anti-backtrack penalties).
+    #   Fixed costs set to zero (don't penalise vehicle use).
     # ════════════════════════════════════════════════════════
     elif cfg.mode == "shortest":
-        routing.SetArcCostEvaluatorOfAllVehicles(antibt_cb_idx)
+        raw_dist_cb_idx = routing.RegisterTransitCallback(
+            _make_raw_dist_cb(manager, dist_dm)
+        )
+        routing.SetArcCostEvaluatorOfAllVehicles(raw_dist_cb_idx)
         for vi, veh in enumerate(vehicles):
-            fixed = _daily_fixed_cost(veh)
-            routing.SetFixedCostOfVehicle(fixed, vi)
-            log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} shortest "
-                      f"fixed={fixed}")
-        span_coeff = 0    # no span pressure — pure distance minimisation
+            routing.SetFixedCostOfVehicle(0, vi)   # ← zero: don't penalise vehicle use
+            log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} shortest fixed=0")
+        span_coeff = 0
 
     # ════════════════════════════════════════════════════════
     # MODE: balanced
@@ -759,7 +769,12 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
     # ── Disjunctions (allow stores to be dropped with penalty) ──────────────
     for i in range(1, n):
         node_idx = manager.NodeToIndex(i)
-        if nodes[i]["travel_s"] > max_h_s * 0.6:
+        if cfg.mode == "shortest":
+            # Force solver to serve every store — dropped stops cost more
+            # than any detour. Use a very large penalty so no store is ever
+            # skipped for the sake of reducing distance.
+            routing.AddDisjunction([node_idx], cfg.penalty_unserved * 1000)
+        elif nodes[i]["travel_s"] > max_h_s * 0.6:
             routing.AddDisjunction([node_idx], cfg.penalty_unserved * 10)
         else:
             routing.AddDisjunction([node_idx], cfg.penalty_unserved)
