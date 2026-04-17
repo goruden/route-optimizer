@@ -274,7 +274,7 @@ export function RunPanel(){
                     <div className="text-[9px] text-slate-400">Хүргэлт + Агуулах</div>
                   </div>
                   <div className="relative">
-                    <input type="number" value={time} min={1} max={9999} //! add disabled
+                    <input type="number" value={time} min={1} max={9999} disabled //! add disabled
                       onChange={e => setTime(Math.max(1, Math.min(9999, Number(e.target.value))))}
                       className="w-14 h-7 text-center text-[12px] font-mono font-bold border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-red-400 pr-6 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"/>
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 font-medium pointer-events-none">s</span>

@@ -31,12 +31,19 @@ def _i(val) -> int:
     return int(val)
 
 
-def _cost(route: Dict) -> Dict:
+def _cost(route: Dict, charged_trucks: set) -> Dict:
     v        = route["vehicle"]
     dist_km  = route["total_dist_m"] / 1000
     fuel     = dist_km * v["fuel_cost_km"]
-    fixed    = v.get("vehicle_cost", 0)
-    labor    = v.get("labor_cost", 0)
+    tid      = route["truck_id"]
+
+    if tid in charged_trucks:
+        fixed = 0
+        labor = 0
+    else:
+        fixed = v.get("vehicle_cost", 0)
+        labor = v.get("labor_cost", 0)
+
     return {"fuel": fuel, "fixed": fixed, "labor": labor,
             "total": fuel + fixed + labor}
 
@@ -64,10 +71,13 @@ def _depot_distances(store: Dict, dist_df) -> Dict:
 
 def build_route_summary(solver_result: Dict) -> List[Dict]:
     summaries = []
+    charged = set()
     for fleet, fr in solver_result.items():
         sched = config.FLEET_SCHEDULE.get(fleet, {})
         for route in fr["routes"]:
-            c       = _cost(route)
+            c       = _cost(route, charged)
+            if route["truck_id"] not in charged:
+                charged.add(route["truck_id"])
             has_nd  = _b(any(s.get("is_next_day") for s in route["stops"]))
             cap_kg  = _f(route["cap_kg"])
             cap_m3  = _f(route["cap_m3"], 3)

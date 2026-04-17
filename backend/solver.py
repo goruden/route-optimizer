@@ -1,11 +1,11 @@
 # ============================================================
-#  solver.py  v9.3 (FIXED)
+#  solver.py  v9.4
 # ============================================================
 
 import math
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
@@ -51,7 +51,6 @@ class SolverConfig:
     urban_max_cap_kg      : float = config.URBAN_MAX_CAP_KG
 
     # How strongly to enforce closest-first ordering within a contractor route.
-    # Higher = harder enforcement. 3.0 = going closer to depot costs 3× more.
     closest_first_factor  : float = 3.0
 
 
@@ -226,7 +225,7 @@ def _build_nodes(depot, stores, fleet, travel_s, store_nids, sched, cfg, season=
         "travel_s"  : 0.0,
         "bearing"   : 0.0,
         "service_s" : 0,
-        "is_urban"  : False,  # depot is not considered urban/rural
+        "is_urban"  : False,
     }]
 
     for s in stores:
@@ -381,7 +380,8 @@ def _make_fuel_cb(
     nodes            : List   = None,
 ):
     """
-    Fuel cost callback — simplified with urban/rural logic.
+    Fuel-only arc cost callback (per-km).
+    vehicle_cost and labor_cost are daily fixed costs handled separately.
     """
     node_is_rural = [not nd.get("is_urban", True) for nd in nodes]
 
@@ -397,23 +397,16 @@ def _make_fuel_cb(
         d_i = dist_depot[ni]
         d_j = dist_depot[nj]
 
-        # ══════════════════════════════════════════════════════════
-        # CONTRACTOR: expensive fallback
-        # ══════════════════════════════════════════════════════════
         if is_contractor:
-            base = int(base * 1.2)   # slight penalty
+            base = int(base * 1.2)
 
-            # Rural bias: prefer contractors for rural stores
             if node_is_rural[nj]:
-                base = int(base * 0.8)   # prefer contractor for rural
+                base = int(base * 0.8)
 
-            # STRICT OUTWARD RULE: never go closer to depot
             if d_i > 100:
                 if d_j < d_i:
-                    # STRICT: never go closer to depot
-                    return int(base * 50)   # huge penalty
+                    return int(base * 50)
 
-            # Outbound sweep enforcement
             if d_i > far_threshold_m:
                 ratio = d_j / d_i if d_i > 0 else 1.0
                 if ratio < out_threshold:
@@ -421,23 +414,16 @@ def _make_fuel_cb(
 
             return int(base)
 
-        # ══════════════════════════════════════════════════════════
-        # FLEET VEHICLE: cheap primary
-        # ══════════════════════════════════════════════════════════
         else:
-            base = int(base * 0.9)   # slight reward
+            base = int(base * 0.9)
 
-            # Rural bias: avoid fleet for rural stores
             if node_is_rural[nj]:
-                base = int(base * 1.5)   # avoid fleet for rural
+                base = int(base * 1.5)
 
-            # STRICT OUTWARD RULE: never go closer to depot
             if d_i > 100:
                 if d_j < d_i:
-                    # STRICT: never go closer to depot
-                    return int(base * 50)   # huge penalty
+                    return int(base * 50)
 
-            # Outbound sweep enforcement
             if d_i > far_threshold_m:
                 ratio = d_j / d_i if d_i > 0 else 1.0
                 if ratio < out_threshold:
@@ -535,7 +521,17 @@ def _diagnose(nd, vehicles, dist_mat, nid_to_idx, nodes, sched, cfg):
 # ════════════════════════════════════════════════════════════
 
 def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
-                    cfg, trip_num=1, season="summer"):
+                    cfg, trip_num=1, season="summer",
+                    trucks_already_used: Optional[Set[str]] = None):
+    """
+    trucks_already_used: set of truck_ids that have already completed at least
+    one trip today.  For these trucks, vehicle_cost and labor_cost are NOT
+    charged again (they are daily costs, not per-trip costs).
+    Only fuel (arc cost, per-km) repeats on every trip.
+    """
+    if trucks_already_used is None:
+        trucks_already_used = set()
+
     sched   = config.FLEET_SCHEDULE[fleet]
     shift_s = sched["start_hour"] * 3600
 
@@ -575,7 +571,6 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
         for ni, nd in enumerate(nodes):
             if nd["is_depot"]:
                 continue
-
             if nd.get("is_urban", False):
                 if veh["cap_m3"] > cfg.urban_max_cap_m3 or veh["cap_kg"] > cfg.urban_max_cap_kg:
                     routing.VehicleVar(manager.NodeToIndex(ni)).RemoveValue(vi)
@@ -599,33 +594,26 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
         )
     )
 
-    span_coeff = 10
+    # ── Helper: compute the daily fixed cost for a vehicle ──────────────────
+    # vehicle_cost and labor_cost are PER-DAY costs.
+    # If a truck has already run a trip today, these are already paid — charge 0.
+    # Fuel cost is per-km (arc cost) and is always charged, so not included here.
+    def _daily_fixed_cost(veh: dict) -> int:
+        if veh["truck_id"] in trucks_already_used:
+            # Daily overhead already charged on trip 1; only fuel (arc cost) applies.
+            return 0
+        return int(veh.get("vehicle_cost", 0) + veh.get("labor_cost", 0))
 
-    if cfg.mode == "shortest":
-        routing.SetArcCostEvaluatorOfAllVehicles(antibt_cb_idx)
-        span_coeff = 0
-        routing.SetFixedCostOfAllVehicles(cfg.vehicle_fixed_cost)
-
-    elif cfg.mode == "fastest":
-        routing.SetArcCostEvaluatorOfAllVehicles(time_cb_idx)
-        span_coeff = 50
-        routing.SetFixedCostOfAllVehicles(cfg.vehicle_fixed_cost)
-
-    elif cfg.mode == "balanced":
-        routing.SetArcCostEvaluatorOfAllVehicles(antibt_cb_idx)
-        span_coeff = config.BALANCED_SPAN_COEFF
-        routing.SetFixedCostOfAllVehicles(cfg.vehicle_fixed_cost)
-
-    elif cfg.mode == "geographic":
-        routing.SetArcCostEvaluatorOfAllVehicles(geo_cb_idx)
-        span_coeff = 20
-        routing.SetFixedCostOfAllVehicles(cfg.vehicle_fixed_cost)
-
-    else:  # cheapest
-        # ── Fleet is cheap primary, contractors are expensive fallback ────────
+    # ════════════════════════════════════════════════════════
+    # MODE: cheapest
+    #   Objective: minimise total real cost (fuel + daily overhead).
+    #   Fleet is cheap primary (low fixed cost multiplier).
+    #   Contractors are expensive fallback (high fixed cost multiplier).
+    #   Urban/rural bias applied via _make_fuel_cb arc costs.
+    # ════════════════════════════════════════════════════════
+    if cfg.mode == "cheapest":
         for vi, veh in enumerate(vehicles):
             fpm = veh["fuel_cost_km"] / 10_000.0
-
             routing.SetArcCostEvaluatorOfVehicle(
                 routing.RegisterTransitCallback(
                     _make_fuel_cb(
@@ -642,23 +630,92 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
                 vi,
             )
 
-            base_cost = veh.get("vehicle_cost", 0) + veh.get("labor_cost", 0)
+            daily_cost = _daily_fixed_cost(veh)
 
             if veh.get("is_contractor"):
-                # Contractors are EXPENSIVE FALLBACK — high fixed cost
-                base_cost = int(base_cost * cfg.contractor_cost_mult)
-                log.debug(f"[{fleet}] Vehicle {veh['truck_id']} is CONTRACTOR "
-                          f"— fixed cost ×{cfg.contractor_cost_mult} = {base_cost}")
+                fixed = int(daily_cost * cfg.contractor_cost_mult)
+                log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} CONTRACTOR "
+                          f"daily_cost={'already_paid' if veh['truck_id'] in trucks_already_used else daily_cost} "
+                          f"→ fixed={fixed} (×{cfg.contractor_cost_mult})")
             else:
-                # Fleet vehicles are CHEAP PRIMARY — low fixed cost
-                base_cost = int(base_cost * cfg.fleet_cost_mult)
-                log.debug(f"[{fleet}] Vehicle {veh['truck_id']} is FLEET "
-                          f"— fixed cost ×{cfg.fleet_cost_mult} = {base_cost}")
+                fixed = int(daily_cost * cfg.fleet_cost_mult)
+                log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} FLEET "
+                          f"daily_cost={'already_paid' if veh['truck_id'] in trucks_already_used else daily_cost} "
+                          f"→ fixed={fixed} (×{cfg.fleet_cost_mult})")
 
-            routing.SetFixedCostOfVehicle(int(base_cost), vi)
+            routing.SetFixedCostOfVehicle(fixed, vi)
 
         span_coeff = 10
 
+    # ════════════════════════════════════════════════════════
+    # MODE: fastest
+    #   Objective: minimise total travel + service time.
+    #   No contractor/fleet cost discrimination — use any vehicle
+    #   that can serve the stop fastest.
+    #   Daily fixed cost still charged once per day (not per trip),
+    #   but multipliers are ignored so the solver picks on speed alone.
+    # ════════════════════════════════════════════════════════
+    elif cfg.mode == "fastest":
+        routing.SetArcCostEvaluatorOfAllVehicles(time_cb_idx)
+        for vi, veh in enumerate(vehicles):
+            # No contractor/fleet multiplier — just bare daily cost.
+            # This lets contractors compete on equal footing with fleet
+            # so the solver can assign whichever truck finishes fastest.
+            fixed = _daily_fixed_cost(veh)
+            routing.SetFixedCostOfVehicle(fixed, vi)
+            log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} fastest "
+                      f"fixed={fixed}")
+        span_coeff = 50   # strong span penalty → equalise finish times
+
+    # ════════════════════════════════════════════════════════
+    # MODE: shortest
+    #   Objective: minimise total distance driven.
+    #   Anti-backtrack arc cost prevents zigzag routes.
+    #   Fixed costs charged once per day (no multipliers).
+    # ════════════════════════════════════════════════════════
+    elif cfg.mode == "shortest":
+        routing.SetArcCostEvaluatorOfAllVehicles(antibt_cb_idx)
+        for vi, veh in enumerate(vehicles):
+            fixed = _daily_fixed_cost(veh)
+            routing.SetFixedCostOfVehicle(fixed, vi)
+            log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} shortest "
+                      f"fixed={fixed}")
+        span_coeff = 0    # no span pressure — pure distance minimisation
+
+    # ════════════════════════════════════════════════════════
+    # MODE: balanced
+    #   Objective: minimise distance while equalising workload.
+    #   Fixed costs charged once per day (no multipliers).
+    # ════════════════════════════════════════════════════════
+    elif cfg.mode == "balanced":
+        routing.SetArcCostEvaluatorOfAllVehicles(antibt_cb_idx)
+        for vi, veh in enumerate(vehicles):
+            fixed = _daily_fixed_cost(veh)
+            routing.SetFixedCostOfVehicle(fixed, vi)
+            log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} balanced "
+                      f"fixed={fixed}")
+        span_coeff = config.BALANCED_SPAN_COEFF
+
+    # ════════════════════════════════════════════════════════
+    # MODE: geographic
+    #   Objective: cluster deliveries by compass sector.
+    #   Angular-weighted arc cost groups geographically close stores.
+    #   Fixed costs charged once per day (no multipliers).
+    # ════════════════════════════════════════════════════════
+    elif cfg.mode == "geographic":
+        routing.SetArcCostEvaluatorOfAllVehicles(geo_cb_idx)
+        for vi, veh in enumerate(vehicles):
+            fixed = _daily_fixed_cost(veh)
+            routing.SetFixedCostOfVehicle(fixed, vi)
+            log.debug(f"[{fleet}] Trip {trip_num} {veh['truck_id']} geographic "
+                      f"fixed={fixed}")
+        span_coeff = 20
+
+    else:
+        raise ValueError(f"Unknown solver mode: '{cfg.mode}'. "
+                         f"Valid: cheapest | fastest | shortest | balanced | geographic")
+
+    # ── Capacity dimensions ──────────────────────────────────────────────────
     def _kg_cb(idx):
         return int(nodes[manager.IndexToNode(idx)]["demand_kg"])
 
@@ -679,6 +736,7 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
         True, "CapM3",
     )
 
+    # ── Time dimension ───────────────────────────────────────────────────────
     routing.AddDimension(time_cb_idx, cfg.max_wait_slack_s, MAX_ROUTE_TIME, False, "Time")
     time_dim = routing.GetDimensionOrDie("Time")
 
@@ -698,6 +756,7 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
     if span_coeff > 0:
         time_dim.SetGlobalSpanCostCoefficient(span_coeff)
 
+    # ── Disjunctions (allow stores to be dropped with penalty) ──────────────
     for i in range(1, n):
         node_idx = manager.NodeToIndex(i)
         if nodes[i]["travel_s"] > max_h_s * 0.6:
@@ -705,6 +764,7 @@ def _or_tools_solve(fleet, depot, stores, vehicles, dist_df, dur_df,
         else:
             routing.AddDisjunction([node_idx], cfg.penalty_unserved)
 
+    # ── Search parameters ────────────────────────────────────────────────────
     params = pywrapcp.DefaultRoutingSearchParameters()
     if cfg.mode == "fastest":
         params.first_solution_strategy = (
@@ -839,17 +899,19 @@ def _solve_fleet_multitrip(fleet, depot, stores, vehicles, dist_df, dur_df,
     """
     Run up to cfg.max_trips sequential trip rounds.
 
-    NEW STRATEGY:
-      1. Fleet vehicles sorted to FRONT of vehicle list (cheap primary).
-         They serve urban stores and are preferred.
-      2. Contractors are EXPENSIVE FALLBACK. They are used when:
-         - Fleet is full
-         - Rural stores (fleet avoids rural)
-         - Large capacity jobs
-      3. Big trucks cannot serve urban stores (hard constraint).
-      4. Urban/rural is defined by City column (UB = urban, anything else = rural).
-      5. Remaining unserved stores after fleet trip are picked up by
-         contractors on the next trip round.
+    COST MODEL
+    ──────────
+    vehicle_cost + labor_cost  →  daily fixed costs, charged ONCE per truck per day.
+                                  On trip 2+ for a truck that already ran trip 1,
+                                  these costs are 0 (already paid).
+    fuel_cost_km               →  per-km arc cost, charged on every trip.
+
+    VEHICLE STRATEGY (cheapest mode)
+    ─────────────────────────────────
+    1. Fleet vehicles sorted to FRONT (cheap primary, low fixed cost multiplier).
+    2. Contractors are EXPENSIVE FALLBACK (high fixed cost multiplier).
+    3. Big trucks cannot serve urban stores (hard constraint).
+    4. Urban = City column == "UB"; rural = everything else.
     """
     sched     = config.FLEET_SCHEDULE[fleet]
     fleet_key = "has_dry" if fleet == "DRY" else "has_cold"
@@ -884,8 +946,6 @@ def _solve_fleet_multitrip(fleet, depot, stores, vehicles, dist_df, dur_df,
     dep_lon = float(depot["lon"])
 
     # ── Sort stores: closest-first ────────────────────────
-    # This seeds OR-Tools with the intended delivery order and
-    # makes PATH_CHEAPEST_ARC naturally pick the nearest unvisited.
     if cfg.mode == "geographic":
         eligible.sort(key=lambda s: _bearing(dep_lat, dep_lon,
                                               float(s["lat"]), float(s["lon"])))
@@ -897,10 +957,7 @@ def _solve_fleet_multitrip(fleet, depot, stores, vehicles, dist_df, dur_df,
                   f"(nearest: {eligible[0]['node_id'] if eligible else 'n/a'}, "
                   f"farthest: {eligible[-1]['node_id'] if eligible else 'n/a'})")
 
-    # ── Sort vehicles — fleet FIRST (cheap primary), contractors SECOND (expensive fallback) ───────────
-    # OR-Tools assigns lower-index vehicles first when arc costs are
-    # equal, so putting fleet at index 0..k ensures they are
-    # filled before contractor fallback vehicles are activated.
+    # ── Sort vehicles — fleet FIRST (cheap primary), contractors SECOND ──────
     vehicles_sorted = sorted(
         vehicles,
         key=lambda v: (1 if v.get("is_contractor", False) else 0, v["truck_id"]),
@@ -911,9 +968,12 @@ def _solve_fleet_multitrip(fleet, depot, stores, vehicles, dist_df, dur_df,
     log.info(f"[{fleet}] Vehicle order: {n_fleet} fleet vehicle(s) first, "
              f"{n_contractors} contractor fallback vehicle(s)")
 
-    remaining    = eligible
-    all_routes   = []
-    truck_return = {v["truck_id"]: 0.0 for v in vehicles_sorted}
+    remaining         = eligible
+    all_routes        = []
+    truck_return      = {v["truck_id"]: 0.0 for v in vehicles_sorted}
+    # Track which trucks have completed at least one trip today.
+    # Used by _or_tools_solve to skip daily fixed costs on subsequent trips.
+    trucks_already_used: Set[str] = set()
 
     def build_available(trip_n):
         min_avail_s = 4 * 3600
@@ -939,23 +999,28 @@ def _solve_fleet_multitrip(fleet, depot, stores, vehicles, dist_df, dur_df,
 
         n_avail_fleet = sum(1 for v in available if not v.get("is_contractor", False))
         log.info("[%s] Trip %d/%d: %d stores, %d/%d trucks (%d fleet, %d contractor), "
-                 "mode=%s, budget=%ds",
+                 "mode=%s, budget=%ds, already_used=%s",
                  fleet, trip_num, cfg.max_trips, len(remaining),
                  len(available), len(vehicles_sorted),
                  n_avail_fleet, len(available) - n_avail_fleet,
-                 cfg.mode, cfg.solver_time_s)
+                 cfg.mode, cfg.solver_time_s,
+                 trucks_already_used or "none")
 
         res = _or_tools_solve(
             fleet, depot, remaining, available,
             dist_df, dur_df, cfg, trip_num, season,
+            trucks_already_used=trucks_already_used,
         )
         all_routes.extend(res["routes"])
 
         for route in res["routes"]:
-            truck_return[route["truck_id"]] = route["return_time_s"]
+            tid = route["truck_id"]
+            truck_return[tid] = route["return_time_s"]
+            # Mark this truck as having completed a trip today so the next
+            # trip will not charge vehicle_cost / labor_cost again.
+            trucks_already_used.add(tid)
 
         served   = {s["node_id"] for r in res["routes"] for s in r["stops"]}
-        prev_len = len(remaining)
         remaining = [s for s in remaining if s["node_id"] not in served]
         log.info("[%s] Trip %d: %d served, %d remain",
                  fleet, trip_num, len(served), len(remaining))
@@ -982,25 +1047,30 @@ def solve(stores, vehicles, dist_df, dur_df, cfg, season="summer"):
     """
     Solve CVRPTW for DRY and COLD fleets.
 
-    NEW STRATEGY — Fleet-first with urban/rural logic
-    ════════════════════════════════════════════════════════
-    cheapest mode (default):
-        • Fleet vehicles get low fixed cost (×fleet_cost_mult = 0.7).
-          They are the CHEAP PRIMARY and serve urban stores.
-        • Contractor vehicles get high fixed cost (×contractor_cost_mult = 4.0).
-          They are the EXPENSIVE FALLBACK, used when:
-          - Fleet is full
-          - Rural stores (fleet avoids rural)
-          - Large capacity jobs
-        • Big trucks cannot serve urban stores (hard constraint).
-        • Urban stores are defined by City column (UB = urban, anything else = rural).
-        • Fleet is preferred for urban, contractors for rural.
+    MODE REFERENCE
+    ══════════════
+    cheapest   Minimise total real cost: fuel (per km, every trip) +
+               vehicle_cost + labor_cost (per day, first trip only).
+               Fleet preferred (low multiplier); contractors are expensive
+               fallback (high multiplier). Urban/rural bias via arc costs.
 
-    All other modes (shortest / fastest / balanced / geographic):
-        Behaviour unchanged from v9.3.
+    fastest    Minimise total travel + service time. No contractor/fleet
+               cost discrimination — solver picks whatever vehicle finishes
+               the route fastest. vehicle_cost + labor_cost still charged
+               once per day (but without multipliers so cost doesn't distort
+               vehicle selection).
+
+    shortest   Minimise total kilometres driven. Anti-backtrack arc cost
+               prevents zigzag routes. No contractor/fleet multipliers.
+
+    balanced   Minimise distance while equalising workload across trucks
+               (global span penalty). No contractor/fleet multipliers.
+
+    geographic Cluster deliveries by compass sector from depot. Best for
+               large sparse networks. No contractor/fleet multipliers.
     """
 
-    # ── Input validation (v9.3, unchanged) ───────────────
+    # ── Input validation ─────────────────────────────────────────────────────
     for s in stores:
         s["node_id"] = _normalise_id(s.get("node_id"))
         s.setdefault("has_dry",      False)
